@@ -32,11 +32,12 @@ def resolve_tags(req: CourseRequest, prefs: UserPreference | None) -> tuple[list
     return tags_a or DEFAULT_TAGS_A, tags_b or DEFAULT_TAGS_B
 
 
-async def fetch_b2_candidates(region: str) -> dict[str, list[dict]]:
-    bars = await fetch_places("바/펍", region) or await fetch_places("기타", region)
+async def fetch_b2_candidates(region: str, lat: float, lon: float) -> dict[str, list[dict]]:
+    near = {"lat": lat, "lon": lon}
+    bars = await fetch_places("바/펍", region, **near) or await fetch_places("기타", region, **near)
     return {
-        "카페": await fetch_places("카페", region),
-        "식당": await fetch_places("레스토랑", region),
+        "카페": await fetch_places("카페", region, **near),
+        "식당": await fetch_places("레스토랑", region, **near),
         "바":   bars,
     }
 
@@ -129,7 +130,7 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
     weather = await get_weather(req.lat, req.lon, req.region, target_date)
     wx_desc = weather["description"]
 
-    candidates = await fetch_b2_candidates(req.region)
+    candidates = await fetch_b2_candidates(req.region, req.lat, req.lon)
 
     async def b2_places(plan) -> list[PlaceItem]:
         return [

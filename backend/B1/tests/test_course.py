@@ -26,7 +26,7 @@ def client(monkeypatch):
     async def weather(*a, **k):
         return {"description": "맑음", "temperature": 20}
 
-    async def places(category, area, size=5):
+    async def places(category, area, size=5, lat=None, lon=None):
         return [{"name": f"{area} {category}{i}", "latitude": 37.5 + i * 0.001, "longitude": 127.0} for i in range(2)]
 
     async def geocode(q):

@@ -136,6 +136,10 @@ async def get_weather(lat: float, lon: float, region: str = "알 수 없음", ta
                 if item["fcstDate"] == target_date:
                     result.setdefault(item["category"], item["fcstValue"])
 
+        # 단기예보 범위(약 3일) 밖 → 기본값(0°C·맑음)을 실제 예보처럼 돌려주지 않도록 실패 처리
+        if not result:
+            raise ValueError(f"{target_date} 예보 없음 (단기예보 범위 밖)")
+
         temp     = float(result.get("TMP", 0))     # 기온
         pcp_raw = result.get("PCP", "0")
         pcp_clean = pcp_raw.replace("강수없음", "0").replace("mm 미만", "").replace("mm", "").strip()
