@@ -1,7 +1,6 @@
 from deepagents import create_deep_agent
-from langchain.chat_models import init_chat_model
 from dotenv import load_dotenv
-import os
+from agents.shared import get_llm
 from tools.hours import get_place_info
 from tools.search import search_places
 from tools.event import search_events
@@ -10,10 +9,7 @@ import sys
 load_dotenv()
 
 sys.stdout.reconfigure(encoding='utf-8')
-llm = init_chat_model(
-     "google_genai:gemini-2.5-flash",
-    api_key=os.getenv("GOOGLE_API_KEY")
-)
+llm = get_llm()
 agent = create_deep_agent(
     model=llm, 
     tools=[search_places, get_place_info,search_events],

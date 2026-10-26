@@ -84,7 +84,7 @@ export async function generateCourses(input: GenerateCourseInput): Promise<Recor
     budget_max: input.budgetMax,
     tags_a:     input.tagsA,
     tags_b:     input.tagsB,
-  }, 120000);
+  }, 240000);   // AI 에이전트(Gemini + 툴 호출)가 혼잡 시 2분 이상 걸림
 
   const [a, b] = data.courses ?? [];
   if (!a?.places?.length || !b?.places?.length) throw new Error("코스 응답이 비어 있어요");
