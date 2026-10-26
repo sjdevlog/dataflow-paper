@@ -1,26 +1,21 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { mockCourseData, mockCourseDataA } from "../mocks/courseData";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { CoursePlace } from "../types/course";
-import { C, GS } from "../constants/theme";
+import { C, FONT, GS } from "../constants/theme";
+import { useActivePlan } from "../contexts/PlanContext";
+import { formatDateShort } from "../utils/date";
 import ActionButtonGroup from "../components/ActionButtonGroup";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-type PlaceWithUrl = CoursePlace & {
-  naverReservationUrl?: string;
-  reservationUrl?: string;
-};
+import PageHeader from "../components/common/PageHeader";
+import AiBubble from "../components/common/AiBubble";
 
 function bookingButton(place: CoursePlace) {
   const naverSearch = (q: string) =>
     `https://search.naver.com/search.naver?query=${encodeURIComponent(q)}`;
 
   if (place.reservationAvailable) {
-    const p = place as PlaceWithUrl;
     const url =
-      p.naverReservationUrl ??
-      p.reservationUrl ??
+      place.naverReservationUrl ??
+      place.reservationUrl ??
       naverSearch(place.name + " 예약");
     return { label: "예약하기", url };
   }
@@ -32,94 +27,11 @@ function bookingButton(place: CoursePlace) {
 
 export default function BookingPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
+  const { plan } = useActivePlan();
+  const { input } = plan;
 
-  const course = (params.get("course") || "A") as "A" | "B";
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  const [placesA, setPlacesA] = useState<CoursePlace[]>(mockCourseDataA.places);
-  const [placesB, setPlacesB] = useState<CoursePlace[]>(mockCourseData.places);
-  const places = course === "A" ? placesA : placesB;
-
-  useEffect(() => {
-    const region = params.get("region") || "";
-    const lat = parseFloat(params.get("lat") || "37.5665");
-    const lon = parseFloat(params.get("lon") || "126.9780");
-    const budget = parseInt(params.get("budget") || "100000");
-    const weather = params.get("weather") || "cloudy";
-    const session = params.get("session") || "";
-    if (!region) return;
-    fetch(`${API_BASE}/course/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: `${session}_A`,
-        region,
-        lat,
-        lon,
-        start_time: "13:00",
-        end_time: "21:00",
-        budget,
-        weather,
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        const a = data.courses?.[0]?.places || [];
-        const b = data.courses?.[1]?.places || [];
-        if (a.length > 0)
-          setPlacesA(
-            a.map((p: any) => ({
-              time: p.time,
-              name: p.name,
-              category:
-                p.category === "카페"
-                  ? "cafe"
-                  : p.category === "식당"
-                    ? "restaurant"
-                    : "activity",
-              spaceType: "indoor" as const,
-              satisfactionA: p.satisfaction_a,
-              satisfactionB: p.satisfaction_b,
-              lat: p.latitude || 37.5665,
-              lon: p.longitude || 126.978,
-              estimatedCost: p.price,
-              budgetRatio: 0,
-              isOverBudget: false,
-              recommendedMenus: [],
-              reservationAvailable: false,
-              relationKeywords: [],
-              desc: p.category,
-            })),
-          );
-        if (b.length > 0)
-          setPlacesB(
-            b.map((p: any) => ({
-              time: p.time,
-              name: p.name,
-              category:
-                p.category === "카페"
-                  ? "cafe"
-                  : p.category === "식당"
-                    ? "restaurant"
-                    : "activity",
-              spaceType: "indoor" as const,
-              satisfactionA: p.satisfaction_a,
-              satisfactionB: p.satisfaction_b,
-              lat: p.latitude || 37.5665,
-              lon: p.longitude || 126.978,
-              estimatedCost: p.price,
-              budgetRatio: 0,
-              isOverBudget: false,
-              recommendedMenus: [],
-              reservationAvailable: false,
-              relationKeywords: [],
-              desc: p.category,
-            })),
-          );
-      })
-      .catch(() => {});
-  }, []);
+  const places = plan.courses[plan.selectedCourse].places;
 
   return (
     <div
@@ -127,104 +39,13 @@ export default function BookingPage() {
         minHeight: "100vh",
         background: C.bg,
         padding: "32px 20px 60px",
-        fontFamily: "'Noto Sans KR', sans-serif",
+        fontFamily: FONT,
       }}
     >
       <style>{GS}</style>
 
-      {/* 헤더 */}
-      <div style={{ marginBottom: 28 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 6,
-          }}
-        >
-          <button
-            onClick={() => navigate(-1)}
-            style={{
-              background: C.mainDim,
-              border: "none",
-              borderRadius: "8px",
-              padding: "6px 12px",
-              color: C.mainDark,
-              fontSize: "13px",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            ← 뒤로
-          </button>
-          <span style={{ fontSize: 20, fontWeight: 900, color: C.mainDark }}>
-            Date<span style={{ color: C.main }}>Flow</span>
-          </span>
-          <span style={{ fontSize: 11, color: C.main, letterSpacing: "0.1em" }}>
-            예약 안내
-          </span>
-        </div>
-        {(params.get("region") || params.get("date")) &&
-          (() => {
-            const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
-            const d = params.get("date");
-            const r = params.get("region");
-            const dateLabel = d
-              ? (() => {
-                  const dt = new Date(d + "T00:00:00");
-                  return `${dt.getMonth() + 1}월 ${dt.getDate()}일 (${KO_DAYS[dt.getDay()]})`;
-                })()
-              : "";
-            return (
-              <p
-                style={{
-                  fontSize: 13,
-                  color: C.textMuted,
-                  margin: 0,
-                  paddingLeft: 4,
-                }}
-              >
-                📍 {r}
-                {dateLabel && ` · 📅 ${dateLabel}`}
-              </p>
-            );
-          })()}
-      </div>
-
-      {/* AI 말풍선 */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-start",
-          marginBottom: 20,
-          animation: "fadeUp 0.4s ease",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            color: C.main,
-            marginBottom: 6,
-            fontWeight: 600,
-          }}
-        >
-          🌸 DateFlow AI
-        </div>
-        <div
-          style={{
-            background: C.mainDark,
-            color: C.card,
-            borderRadius: "18px 18px 18px 4px",
-            padding: "12px 20px",
-            fontSize: 14,
-            fontWeight: 600,
-            maxWidth: 280,
-          }}
-        >
-          각 장소에서 바로 예매하실 수 있어요!
-        </div>
-      </div>
+      <PageHeader label="예약 안내" showBack subtitle={`📍 ${input.region.name} · 📅 ${formatDateShort(input.date)}`} />
+      <AiBubble message="각 장소에서 바로 예매하실 수 있어요!" maxWidth={280} />
 
       {/* 장소 예약 목록 */}
       <div
@@ -344,7 +165,7 @@ export default function BookingPage() {
       </div>
 
       <button
-        onClick={() => navigate("/complete?" + params.toString())}
+        onClick={() => navigate("/complete")}
         style={{
           width: "100%",
           padding: 16,
@@ -356,7 +177,7 @@ export default function BookingPage() {
           fontWeight: 700,
           cursor: "pointer",
           boxShadow: "0 4px 20px rgba(90,68,128,0.3)",
-          fontFamily: "'Noto Sans KR', sans-serif",
+          fontFamily: FONT,
         }}
       >
         코스 확정하기 →

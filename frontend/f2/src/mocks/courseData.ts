@@ -1,4 +1,4 @@
-import type { CourseResult, CrowdByHour, Review } from '../types/course';
+import type { CourseKey, CourseResult, CrowdByHour, GeneratedCourse, Review } from '../types/course';
 
 export const mockCourseData: CourseResult = {
   title: '성수동 데이트 코스 ',
@@ -327,6 +327,12 @@ export const mockCourseDataA: CourseResult = {
       breakTime: undefined,
     },
   ],
+};
+
+// 백엔드 코스 생성 실패 시 폴백 (화면에 '샘플 데이터'로 표시됨)
+export const mockCourses: Record<CourseKey, GeneratedCourse> = {
+  A: { title: '차분한 감성 코스', places: mockCourseDataA.places, source: 'mock' },
+  B: { title: '액티브 핫플 코스', places: mockCourseData.places, source: 'mock' },
 };
 
 export const mockCrowdData: CrowdByHour[] = [

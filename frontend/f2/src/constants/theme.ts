@@ -32,7 +32,9 @@ export const C = {
   greenBg:     "#E8F5E9",
 };
 
-/** 공통 keyframes + reset. OnboardingPage-specific input 스타일은 해당 파일 로컬 GS에 포함. */
+export const FONT = "'Noto Sans KR', sans-serif";
+
+/** 공통 keyframes + reset */
 export const GS = `
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
   @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
@@ -43,4 +45,17 @@ export const GS = `
   @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
   @keyframes shake  { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
   * { box-sizing:border-box; }
+`;
+
+/** 입력 폼(로그인·온보딩) 공통 스타일 + 모바일 대응 클래스 */
+export const GS_FORM = GS + `
+  input:focus { border-color:#B8A9D9 !important; outline:none; box-shadow:0 0 0 3px #B8A9D922; }
+  input[type=range] { -webkit-appearance:none; appearance:none; height:4px; background:transparent; cursor:pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:#B8A9D9; cursor:grab; border:3px solid #F5F3FB; box-shadow:0 2px 8px #B8A9D950; }
+  @media (max-width:480px) {
+    .df-title     { font-size:30px !important; }
+    .df-step-title{ font-size:20px !important; }
+    .df-inner     { padding-left:14px !important; padding-right:14px !important; padding-top:28px !important; }
+    .df-nav-btn   { padding:12px !important; font-size:13px !important; }
+  }
 `;

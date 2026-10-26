@@ -2,32 +2,35 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { C, FONT, GS_FORM } from "../constants/theme";
+import * as authApi from "../api/auth";
+import type { Gender } from "../api/auth";
 
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8001";
-
-const C = {
-  bg: "#F5F3FB", card: "#FFFFFF", border: "#E8E4F4",
-  main: "#B8A9D9", mainDim: "#EAE5F5",
-  point: "#E8A0B4", pointDim: "#FCE8EE",
-  text: "#3D3257", textDim: "#7B6FA0", textMuted: "#B0A8CC",
-  inputBg: "#F0EDF9", inputBorder: "#D8D0EE",
-  error: "#E87070", errorBg: "#FDE8E8",
-};
-
-const GS = `
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
-  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { background:#F5F3FB; }
-  input:focus { border-color:#B8A9D9 !important; outline:none; box-shadow:0 0 0 3px #B8A9D922; }
+const GS = GS_FORM + `
+  * { margin:0; padding:0; }
+  body { background:${C.bg}; }
 `;
 
 const inputStyle = {
   width: "100%", padding: "13px 16px",
   background: C.inputBg, border: `1.5px solid ${C.inputBorder}`,
   borderRadius: 12, color: C.text, fontSize: 15,
-  fontFamily: "'Noto Sans KR',sans-serif",
+  fontFamily: FONT,
 };
+
+function GenderBtn({ val, label, selected, onSelect }: { val: Gender; label: string; selected: boolean; onSelect: (v: Gender) => void }) {
+  return (
+    <button type="button" onClick={() => onSelect(val)} style={{
+      flex: 1, padding: "10px 0", borderRadius: 10,
+      border: selected ? "none" : `1.5px solid ${C.cardBorder}`,
+      background: selected ? C.main : C.card,
+      color: selected ? "#fff" : C.textDim,
+      fontSize: 14, fontWeight: selected ? 700 : 400,
+      cursor: "pointer", fontFamily: FONT,
+      transition: "all 0.18s",
+    }}>{label}</button>
+  );
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -37,7 +40,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
-  const [gender, setGender] = useState<"M" | "F" | "N">("N");
+  const [gender, setGender] = useState<Gender>("N");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -69,43 +72,17 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-      const body = mode === "login"
-        ? { username, password }
-        : { username, password, nickname, gender };
-
-      const res = await fetch(`${API}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const d = data.detail;
-        setError(Array.isArray(d) ? d.map((e: { msg: string }) => e.msg.replace("Value error, ", "")).join(" / ") : (d ?? "오류가 발생했습니다."));
-        return;
-      }
-
-      login({ ...data, token: data.access_token });
+      const user = mode === "login"
+        ? await authApi.login(username, password)
+        : await authApi.register(username, password, nickname, gender);
+      login(user);
       navigate("/");
-    } catch {
-      setError("서버에 연결할 수 없습니다.");
+    } catch (err) {
+      setError(authApi.authErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
-
-  const GenderBtn = ({ val, label }: { val: "M" | "F" | "N"; label: string }) => (
-    <button type="button" onClick={() => setGender(val)} style={{
-      flex: 1, padding: "10px 0", borderRadius: 10,
-      border: gender === val ? "none" : `1.5px solid ${C.border}`,
-      background: gender === val ? C.main : C.card,
-      color: gender === val ? "#fff" : C.textDim,
-      fontSize: 14, fontWeight: gender === val ? 700 : 400,
-      cursor: "pointer", fontFamily: "'Noto Sans KR',sans-serif",
-      transition: "all 0.18s",
-    }}>{label}</button>
-  );
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 20px" }}>
@@ -117,7 +94,7 @@ export default function LoginPage() {
           <h1 style={{ fontSize: 36, fontWeight: 900, color: C.text, letterSpacing: "-0.03em" }}>
             Date<span style={{ color: C.main }}>Flow</span>
           </h1>
-          <p style={{ fontSize: 13, color: C.textMuted, marginTop: 6, fontFamily: "'Noto Sans KR',sans-serif" }}>
+          <p style={{ fontSize: 13, color: C.textMuted, marginTop: 6, fontFamily: FONT }}>
             두 사람의 취향으로 만드는 데이트 코스
           </p>
         </div>
@@ -130,7 +107,7 @@ export default function LoginPage() {
               background: mode === m ? C.card : "transparent",
               color: mode === m ? C.main : C.textMuted,
               fontWeight: mode === m ? 700 : 400, fontSize: 14, cursor: "pointer",
-              fontFamily: "'Noto Sans KR',sans-serif",
+              fontFamily: FONT,
               boxShadow: mode === m ? "0 1px 6px #B8A9D922" : "none",
               transition: "all 0.2s",
             }}>{m === "login" ? "로그인" : "회원가입"}</button>
@@ -170,16 +147,16 @@ export default function LoginPage() {
               <div>
                 <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 6, fontWeight: 500 }}>성별</label>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <GenderBtn val="M" label="남자" />
-                  <GenderBtn val="F" label="여자" />
-                  <GenderBtn val="N" label="선택 안 함" />
+                  <GenderBtn val="M" label="남자" selected={gender === "M"} onSelect={setGender} />
+                  <GenderBtn val="F" label="여자" selected={gender === "F"} onSelect={setGender} />
+                  <GenderBtn val="N" label="선택 안 함" selected={gender === "N"} onSelect={setGender} />
                 </div>
               </div>
             </>
           )}
 
           {error && (
-            <div style={{ background: C.errorBg, border: `1px solid ${C.error}44`, borderRadius: 10, padding: "10px 14px", color: C.error, fontSize: 13, fontFamily: "'Noto Sans KR',sans-serif" }}>
+            <div style={{ background: C.errorBg, border: `1px solid ${C.error}44`, borderRadius: 10, padding: "10px 14px", color: C.error, fontSize: 13, fontFamily: FONT }}>
               {error}
             </div>
           )}
@@ -190,7 +167,7 @@ export default function LoginPage() {
             color: loading ? C.textMuted : "#fff",
             border: "none", borderRadius: 13, fontSize: 15, fontWeight: 700,
             cursor: loading ? "not-allowed" : "pointer",
-            fontFamily: "'Noto Sans KR',sans-serif",
+            fontFamily: FONT,
             boxShadow: loading ? "none" : "0 4px 16px #B8A9D940",
             transition: "all 0.2s",
           }}>

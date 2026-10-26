@@ -45,6 +45,7 @@ export default function CourseTimeline({ places, onSelectPlace }: Props) {
                                 {place.travelModeToNext === 'car' && '🚗'}
                                 {place.travelModeToNext === 'transit' && '🚇'}
                                 {place.travelTimeToNext ? `${place.travelTimeToNext}분` : '이동'}
+                                {place.carTimeToNext != null && ` · 🚗 ${place.carTimeToNext}분`}
                             </span>
                         </div>
                     )}

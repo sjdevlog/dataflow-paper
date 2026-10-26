@@ -1,13 +1,6 @@
 import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
-
-interface AuthUser {
-  user_id: string;
-  username: string;
-  nickname: string;
-  gender: string;
-  token: string;
-}
+import type { AuthUser } from "../api/auth";
 
 interface AuthCtx {
   user: AuthUser | null;

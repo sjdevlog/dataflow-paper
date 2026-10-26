@@ -6,6 +6,7 @@ export function getWeatherEmoji(weatherType: WeatherType): string {
         case 'sunny': return '☀️';
         case 'cloudy': return '☁️';
         case 'rainy': return '🌧️';
+        case 'snow': return '❄️';
         default: return '';
     }
 }

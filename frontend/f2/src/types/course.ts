@@ -64,6 +64,7 @@ export interface CoursePlace {
     originalName?: string;
     travelTimeToNext?: number;
     travelModeToNext?: 'walk' | 'car' | 'transit';
+    carTimeToNext?: number;             // 자동차 이동 시간 (분) — 백엔드 car_minutes_to_next
     openingHours?: string;
     closedDays?: string;
     breakTime?: string;
@@ -78,6 +79,57 @@ export interface CourseResult {
     common: string[];  // 공통 취향
     weather: WeatherInfo;
     budget: number;
+}
+
+// A안 / B안
+export type CourseKey = 'A' | 'B';
+
+// 코스 출처 — ai: AI 에이전트, b2: 장소 DB 폴백, mock: 백엔드 실패 시 샘플 데이터
+export type CourseSource = 'ai' | 'b2' | 'mock';
+
+// 프론트에서 쓰는 생성된 코스 한 개
+export interface GeneratedCourse {
+    title: string;
+    places: CoursePlace[];
+    source: CourseSource;
+    avgSatisfactionA?: number;
+    avgSatisfactionB?: number;
+    fairnessGap?: number;              // |평균 만족도 A − B|
+}
+
+// 백엔드 POST /course/generate 응답 (backend/B1/app/schemas/course.py)
+export interface BackendPlace {
+    name: string;
+    category: string;
+    region: string;
+    time: string;
+    price: number;
+    is_open: boolean;
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+    walk_minutes_to_next?: number | null;
+    car_minutes_to_next?: number | null;
+    satisfaction_a?: number | null;
+    satisfaction_b?: number | null;
+}
+
+export interface BackendCourse {
+    title: string;
+    total_price: number;
+    places: BackendPlace[];
+    source?: 'ai' | 'b2';
+    avg_satisfaction_a?: number | null;
+    avg_satisfaction_b?: number | null;
+    fairness_gap?: number | null;
+}
+
+export interface BackendCourseResponse {
+    course_id: string;
+    user_id: string;
+    region: string;
+    budget_max: number;
+    weather?: string | null;
+    courses: BackendCourse[];
 }
 
 // 시간대별 혼잡도 데이터

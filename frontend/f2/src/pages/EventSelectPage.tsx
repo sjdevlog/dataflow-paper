@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { C, GS } from "../constants/theme";
+import { useNavigate } from "react-router-dom";
+import { C, FONT, GS } from "../constants/theme";
+import { usePlan } from "../contexts/PlanContext";
+import PageHeader from "../components/common/PageHeader";
+import AiBubble from "../components/common/AiBubble";
 
 type Event = { icon: string; name: string; sub: string; category: string };
 
@@ -48,12 +51,13 @@ function getEventsForRegion(region: string): Event[] {
 
 export default function EventSelectPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const params   = new URLSearchParams(location.search);
-  const region   = params.get("region") || "성수동";
+  const { plan, setEvents } = usePlan();
+  const region   = plan?.input.region.name || "성수동";
 
   const [events]                = useState<Event[]>(() => getEventsForRegion(region));
-  const [selected, setSelected] = useState<number[]>([]);
+  const [selected, setSelected] = useState<number[]>(
+    () => (plan?.events ?? []).map(name => events.findIndex(e => e.name === name)).filter(i => i >= 0)
+  );
   const [showAI,   setShowAI]   = useState(false);
   const [showCards, setShowCards] = useState(false);
 
@@ -68,33 +72,17 @@ export default function EventSelectPage() {
   };
 
   const handleNext = () => {
-    const next = new URLSearchParams(params);
-    if (selected.length > 0) next.set("events", selected.map(i => events[i].name).join(","));
-    navigate("/courses?" + next.toString());
+    setEvents(selected.map(i => events[i].name));
+    navigate("/courses");
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, padding: "32px 20px 60px", fontFamily: "'Noto Sans KR', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, padding: "32px 20px 60px", fontFamily: FONT }}>
       <style>{GS}</style>
 
-      {/* 헤더 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 28 }}>
-        <span style={{ fontSize: 20, fontWeight: 900, color: C.mainDark }}>
-          Date<span style={{ color: C.main }}>Flow</span>
-        </span>
-        <span style={{ fontSize: 11, color: C.main, letterSpacing: "0.1em" }}>이벤트 추천</span>
-      </div>
+      <PageHeader label="이벤트 추천" />
 
-      {/* AI 말풍선 */}
-      {showAI && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", marginBottom: 20, animation: "fadeUp 0.4s ease" }}>
-          <div style={{ fontSize: 11, color: C.main, marginBottom: 6, fontWeight: 600 }}>🌸 DateFlow AI</div>
-          <div style={{ background: C.mainDark, color: "#fff", borderRadius: "18px 18px 18px 4px", padding: "12px 20px", fontSize: 14, fontWeight: 600, maxWidth: 300 }}>
-            지금 {region}에서 이런 이벤트들이 진행 중이에요!
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: C.main }}>관심 있는 이벤트를 골라보세요</div>
-        </div>
-      )}
+      {showAI && <AiBubble message={`지금 ${region}에서 이런 이벤트들이 진행 중이에요!`} hint="관심 있는 이벤트를 골라보세요" />}
 
       {/* 이벤트 카드 2×2 그리드 */}
       {showCards && (
@@ -129,7 +117,7 @@ export default function EventSelectPage() {
       )}
 
       {showCards && (
-        <button onClick={handleNext} style={{ width: "100%", padding: 16, background: C.mainDark, color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(90,68,128,0.3)", fontFamily: "'Noto Sans KR', sans-serif", animation: "fadeUp 0.4s ease 0.4s both" }}>
+        <button onClick={handleNext} style={{ width: "100%", padding: 16, background: C.mainDark, color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(90,68,128,0.3)", fontFamily: FONT, animation: "fadeUp 0.4s ease 0.4s both" }}>
           {selected.length > 0 ? `${selected.length}개 이벤트 포함해서 코스 짜줘 →` : "이벤트 없이 코스 짜줘 →"}
         </button>
       )}

@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { C, GS } from "../constants/theme";
-import { mockCourseData, mockCourseDataA } from "../mocks/courseData";
-import type { CoursePlace } from "../types/course";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { useState } from "react";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
+import { C, FONT, GS } from "../constants/theme";
+import { CAT_EMOJI, COURSE_LABEL } from "../constants/course";
+import { KAKAO_JS_KEY as KAKAO_KEY } from "../config";
+import { usePlan } from "../contexts/PlanContext";
+import { formatDateShort } from "../utils/date";
+import { decodeShare, shareUrl } from "../utils/share";
+import type { SharedCourse } from "../utils/share";
 
 declare const Kakao: {
   isInitialized: () => boolean;
@@ -12,17 +14,7 @@ declare const Kakao: {
   Share: { sendDefault: (opts: Record<string, unknown>) => void };
 };
 
-const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAPS_API_KEY as string | undefined;
-
-const CAT_EMOJI: Record<string, string> = {
-  cafe: "☕",
-  culture: "🎨",
-  restaurant: "🍽️",
-  activity: "🏃",
-  shopping: "🛍️",
-};
-
-function PlaceRow({ place, index }: { place: CoursePlace; index: number }) {
+function PlaceRow({ place, index }: { place: SharedCourse["places"][number]; index: number }) {
   return (
     <div
       style={{
@@ -63,84 +55,29 @@ function PlaceRow({ place, index }: { place: CoursePlace; index: number }) {
 export default function CompletePage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
-
-  const courseKey = params.get("course") || "A";
-  const region = params.get("region") || "성수동";
-  const courseLabel =
-    courseKey === "A" ? "차분한 감성 코스" : "액티브 핫플 코스";
-
-  const [placesA, setPlacesA] = useState<CoursePlace[]>(mockCourseDataA.places);
-  const [placesB, setPlacesB] = useState<CoursePlace[]>(mockCourseData.places);
-  const places = courseKey === "A" ? placesA : placesB;
-  useEffect(() => {
-    const region = params.get("region") || "";
-    const lat = parseFloat(params.get("lat") || "37.5665");
-    const lon = parseFloat(params.get("lon") || "126.9780");
-    const budget = parseInt(params.get("budget") || "100000");
-    const weather = params.get("weather") || "cloudy";
-    const session = params.get("session") || "";
-    if (!region) return;
-    fetch(`${API_BASE}/course/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: `${session}_A`,
-        region,
-        lat,
-        lon,
-        start_time: "13:00",
-        end_time: "21:00",
-        budget,
-        weather,
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        const a = data.courses?.[0]?.places || [];
-        const b = data.courses?.[1]?.places || [];
-        const map = (p: any) => ({
-          time: p.time,
-          name: p.name,
-          category:
-            p.category === "카페"
-              ? "cafe"
-              : p.category === "식당"
-                ? "restaurant"
-                : "activity",
-          spaceType: "indoor" as const,
-          satisfactionA: p.satisfaction_a,
-          satisfactionB: p.satisfaction_b,
-          lat: p.latitude || 37.5665,
-          lon: p.longitude || 126.978,
-          estimatedCost: p.price,
-          budgetRatio: 0,
-          isOverBudget: false,
-          recommendedMenus: [],
-          reservationAvailable: false,
-          relationKeywords: [],
-          desc: p.category,
-        });
-        if (a.length > 0) setPlacesA(a.map(map));
-        if (b.length > 0) setPlacesB(b.map(map));
-      })
-      .catch(() => {});
-  }, []);
-
-  const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
-  const d = params.get("date");
-  const dateLabel = d
-    ? (() => {
-        const dt = new Date(d + "T00:00:00");
-        return `${dt.getMonth() + 1}월 ${dt.getDate()}일 (${KO_DAYS[dt.getDay()]})`;
-      })()
-    : "";
-
+  const { plan, clearPlan } = usePlan();
   const [copied, setCopied] = useState(false);
+
+  // 공유 링크(?share=)로 들어오면 링크에 담긴 코스, 아니면 진행 중인 코스
+  const shared: SharedCourse | null =
+    decodeShare(new URLSearchParams(location.search).get("share")) ??
+    (plan && {
+      region: plan.input.region.name,
+      date: plan.input.date,
+      course: plan.selectedCourse,
+      places: plan.courses[plan.selectedCourse].places,
+    });
+
+  if (!shared) return <Navigate to="/" replace />;
+
+  const { region, places } = shared;
+  const courseLabel = COURSE_LABEL[shared.course];
+  const dateLabel = formatDateShort(shared.date);
+  const link = shareUrl(shared);
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(link);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -161,16 +98,16 @@ export default function CompletePage() {
             : "두 사람의 취향으로 만든 데이트 코스",
           imageUrl: "https://via.placeholder.com/400x200?text=DateFlow",
           link: {
-            mobileWebUrl: window.location.href,
-            webUrl: window.location.href,
+            mobileWebUrl: link,
+            webUrl: link,
           },
         },
         buttons: [
           {
             title: "코스 보기",
             link: {
-              mobileWebUrl: window.location.href,
-              webUrl: window.location.href,
+              mobileWebUrl: link,
+              webUrl: link,
             },
           },
         ],
@@ -186,7 +123,7 @@ export default function CompletePage() {
         minHeight: "100vh",
         background: C.bg,
         padding: "40px 24px 60px",
-        fontFamily: "'Noto Sans KR', sans-serif",
+        fontFamily: FONT,
       }}
     >
       <style>{GS}</style>
@@ -298,7 +235,7 @@ export default function CompletePage() {
                 color: copied ? C.green : C.textDim,
                 cursor: "pointer",
                 transition: "all 0.2s",
-                fontFamily: "'Noto Sans KR', sans-serif",
+                fontFamily: FONT,
               }}
             >
               {copied ? "✓ 복사됨" : "🔗 링크 복사"}
@@ -315,7 +252,7 @@ export default function CompletePage() {
                 fontWeight: 700,
                 color: "#3C1E1E",
                 cursor: "pointer",
-                fontFamily: "'Noto Sans KR', sans-serif",
+                fontFamily: FONT,
               }}
             >
               💬 카카오톡 공유
@@ -326,7 +263,7 @@ export default function CompletePage() {
         {/* 처음으로 */}
         <div style={{ textAlign: "center" }}>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => { clearPlan(); navigate("/"); }}
             style={{
               padding: "12px 32px",
               background: "transparent",
@@ -336,7 +273,7 @@ export default function CompletePage() {
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
-              fontFamily: "'Noto Sans KR', sans-serif",
+              fontFamily: FONT,
             }}
           >
             처음으로 돌아가기
