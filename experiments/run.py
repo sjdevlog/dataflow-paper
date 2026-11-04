@@ -242,8 +242,8 @@ def done_keys(path):
     for r in rows:
         key = (r["scenario_id"], r["rep"])
         by.setdefault(key, set()).add(r["system"])
-        if r["system"] == "ERROR" or r.get("error", "").startswith("no main event"):
-            failed.add(key)                      # 메인 이벤트 실패·예외는 다시 실행
+        if r["system"] == "ERROR" or r.get("error"):
+            failed.add(key)                      # 오류(429 한도 초과 등)가 난 시나리오는 다시 실행
     return {k for k, v in by.items() if {"R", "L", "LV", "LVF"} <= v and k not in failed}
 
 
