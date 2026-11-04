@@ -99,6 +99,7 @@ class Real:
         r = self._rec(natural_language=f"{sc['region']}에서 데이트할 만한 전시나 공연", area=sc["region"],
                       visit_date=sc["date"])
         ev = r.get("events", [])
+        self.last_error = r.get("error") or f"이벤트 0개 (parse={r.get('_parse_status', '')})"
         return ev[0] if ev else None
 
     def generate(self, sc, event, n, verify):
@@ -237,10 +238,28 @@ def done_keys(path):
         return set()
     with path.open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
-    by = {}
+    by, failed = {}, set()
     for r in rows:
-        by.setdefault((r["scenario_id"], r["rep"]), set()).add(r["system"])
-    return {k for k, v in by.items() if {"R", "L", "LV", "LVF"} <= v}
+        key = (r["scenario_id"], r["rep"])
+        by.setdefault(key, set()).add(r["system"])
+        if r["system"] == "ERROR" or r.get("error", "").startswith("no main event"):
+            failed.add(key)                      # 메인 이벤트 실패·예외는 다시 실행
+    return {k for k, v in by.items() if {"R", "L", "LV", "LVF"} <= v and k not in failed}
+
+
+def purge(path, key):
+    """다시 실행할 (scenario_id, rep)의 이전 행을 지워 중복 집계를 막는다"""
+    if not path.exists():
+        return
+    with path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fields, rows = reader.fieldnames, list(reader)
+    keep = [r for r in rows if (r["scenario_id"], r["rep"]) != key]
+    if len(keep) != len(rows):
+        with path.open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            w.writerows(keep)
 
 
 def run_one(api, sc, rep, runs_csv, lam_csv):
@@ -249,7 +268,8 @@ def run_one(api, sc, rep, runs_csv, lam_csv):
     event = api.main_event(sc)
     if not event:
         for system in ("R", "L", "LV", "LVF"):
-            append(runs_csv, RUN_FIELDS, {**base, "system": system, "success": 0, "error": "no main event"})
+            append(runs_csv, RUN_FIELDS, {**base, "system": system, "success": 0,
+                                          "error": f"no main event: {getattr(api, 'last_error', '')}"[:300]})
         return
 
     # 생성 단계
@@ -320,12 +340,14 @@ def main():
 
     for i, (sc, rep) in enumerate(todo, 1):
         t0 = time.time()
+        for path in (runs_csv, lam_csv):
+            purge(path, (sc["scenario_id"], str(rep)))
         try:
             run_one(api, sc, rep, runs_csv, lam_csv)
         except Exception as e:                      # 한 시나리오 실패가 전체를 멈추지 않도록
             append(runs_csv, RUN_FIELDS, {**sc, "rep": rep, "system": "ERROR", "success": 0,
                                           "error": f"{type(e).__name__}: {e}"})
-        print(f"[{i}/{len(todo)}] {sc['scenario_id']} rep{rep} — {time.time() - t0:.1f}s")
+        print(f"[{i}/{len(todo)}] {sc['scenario_id']} rep{rep} — {time.time() - t0:.1f}s", flush=True)
 
 
 if __name__ == "__main__":

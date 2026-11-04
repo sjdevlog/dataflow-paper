@@ -38,6 +38,16 @@ def main():
         print("results/runs.csv 가 없습니다. 먼저 experiments/run.py 를 실행하세요.")
         return
 
+    errors = {}
+    for r in runs:
+        if r.get("error"):
+            errors[r["error"][:160]] = errors.get(r["error"][:160], 0) + 1
+    if errors:
+        print("### 오류 (상위 5개)\n")
+        for e, n in sorted(errors.items(), key=lambda x: -x[1])[:5]:
+            print(f"- {n}회: {e}")
+        print()
+
     summary = {}
     print("### 표 8. 시스템별 성능 비교 (평균 ± 표준편차)\n")
     print("| 시스템 | 성공률 | 위반율 | 평균 만족도 | Fairness gap | 이동시간(분, 직선) | 응답 시간(초) | 툴 호출 수 |")
