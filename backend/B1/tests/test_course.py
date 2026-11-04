@@ -143,3 +143,77 @@ def test_select_fair_course_avoids_closed_places():
     ]
     idx, _ = select_fair_course(cands, ["감성 카페"], ["핫플 방문"], lam=1)
     assert idx == 1
+
+
+# ── 메인 이벤트 추천 (/course/events) ──────────────────────────────
+import app.services.events as ev_svc
+
+EV_REQ = {"region": "양평", "lat": 37.49, "lon": 127.49, "date": "2026-11-07",
+          "tags_a": ["전시·문화"], "tags_b": ["산책·자연"]}
+
+
+def _doc(name, cat="문화,예술 > 전시관"):
+    return {"place_name": name, "category_name": cat, "address_name": "경기 양평군", "x": "127.49", "y": "37.49",
+            "place_url": f"http://place.map.kakao.com/{abs(hash(name)) % 1000}"}
+
+
+def test_events_keeps_only_ai_events_found_nearby(client, monkeypatch):
+    # AI가 3개 추천 → 그중 '서울 콘서트홀'은 양평 반경에서 검색 안 됨 → 제외
+    ai = [{"name": "양평 미술관", "category": "전시", "reason": "조용한 전시"},
+          {"name": "서울 콘서트홀", "category": "공연"},
+          {"name": "두물머리 공방", "category": "체험"}]
+    monkeypatch.setattr(ev_svc.ai_bridge, "recommend_events", lambda **k: ai)
+    near = {"양평 미술관": [_doc("양평 미술관")], "두물머리 공방": [_doc("두물머리 공방", "체험 > 공방")]}
+
+    async def fake_kakao(client_, query, lat, lon, size):
+        return near.get(query, [])
+    monkeypatch.setattr(ev_svc, "_kakao", fake_kakao)
+
+    data = client.post("/course/events", json=EV_REQ).json()
+    names = [e["name"] for e in data["events"]]
+    assert "서울 콘서트홀" not in names
+    assert names[:2] == ["양평 미술관", "두물머리 공방"]
+    assert data["events"][0]["source"] == "ai" and data["events"][0]["reason"] == "조용한 전시"
+
+
+def test_events_falls_back_to_kakao_and_never_pads(client, monkeypatch):
+    # AI 실패 + 반경 안에 갤러리 1곳뿐 → 1개만 반환 (억지로 6개 채우지 않음)
+    monkeypatch.setattr(ev_svc.ai_bridge, "recommend_events", lambda **k: [])
+
+    async def fake_kakao(client_, query, lat, lon, size):
+        return [_doc("양평 갤러리")] if query == "갤러리" else []
+    monkeypatch.setattr(ev_svc, "_kakao", fake_kakao)
+
+    data = client.post("/course/events", json=EV_REQ).json()
+    assert [e["name"] for e in data["events"]] == ["양평 갤러리"]
+    assert data["source"] == "kakao"
+
+
+def test_events_empty_region_gives_message(client, monkeypatch):
+    monkeypatch.setattr(ev_svc.ai_bridge, "recommend_events", lambda **k: [])
+
+    async def fake_kakao(*a, **k):
+        return []
+    monkeypatch.setattr(ev_svc, "_kakao", fake_kakao)
+    data = client.post("/course/events", json=EV_REQ).json()
+    assert data["events"] == [] and data["source"] == "none" and "찾지 못했어요" in data["message"]
+
+
+def test_events_more_excludes_shown(client, monkeypatch):
+    async def fake_kakao(client_, query, lat, lon, size):
+        return [_doc(f"{query} A"), _doc(f"{query} B")]
+    monkeypatch.setattr(ev_svc, "_kakao", fake_kakao)
+    data = client.post("/course/events", json={**EV_REQ, "more": True, "exclude": ["전시 A"]}).json()
+    names = [e["name"] for e in data["events"]]
+    assert len(names) == 3 and "전시 A" not in names
+
+
+def test_no_event_uses_walk_as_main(client, monkeypatch):
+    called = {}
+    def fake_gen(**k):
+        called.update(k)
+        return {"courses": []}
+    monkeypatch.setattr(course.ai_bridge, "recommend_events", lambda **k: (_ for _ in ()).throw(AssertionError("호출 안 함")))
+    monkeypatch.setattr(course.ai_bridge, "generate_course", fake_gen)
+    client.post("/course/generate", json={**REQUEST, "no_event": True})
+    assert called["selected_event"]["category"] == "산책"

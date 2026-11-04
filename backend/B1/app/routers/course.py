@@ -5,12 +5,12 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from app.database import get_db
 from app.models.user import UserPreference
-from app.schemas.course import CourseRequest, CourseResponse, CourseItem, PlaceItem
+from app.schemas.course import CourseRequest, CourseResponse, CourseItem, PlaceItem, EventRequest, EventResponse
 from app.services.weather import get_weather
 from app.services.kakao import geocode, transport_minutes
 from app.services.places import fetch_places
 from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course
-from app.services import ai_bridge
+from app.services import ai_bridge, events as event_service
 
 router = APIRouter()
 
@@ -99,6 +99,9 @@ async def ai_course_places(req: CourseRequest, mood: str, weather: dict, budget:
     """
     wx = {"condition": weather.get("description", ""), "temp_celsius": weather.get("temperature", 20)}
     event = req.selected_event
+    if not event and req.no_event:
+        # 근처에 전시·공연이 없을 때: 산책을 중심 일정으로 두고 카페·식당 위주로 구성
+        event = {"name": f"{req.region} 산책", "category": "산책"}
     if not event:
         events = await run_in_threadpool(
             ai_bridge.recommend_events,
@@ -145,6 +148,20 @@ async def ai_course_places(req: CourseRequest, mood: str, weather: dict, budget:
             satisfaction_b=satisfaction(tags_b, category),
         ))
     return places, chosen.get("violations")
+
+
+@router.post("/events", response_model=EventResponse)
+async def recommend_events(req: EventRequest):
+    """메인 이벤트 추천 — 선택한 지역 반경 안에 실제로 있는 장소만 반환 (개수를 억지로 채우지 않음)"""
+    if req.more:
+        found = await event_service.search_nearby(req.lat, req.lon, set(req.exclude), event_service.MORE_SIZE)
+        msg = "" if found else "주변에서 더 찾을 수 있는 장소가 없어요."
+        return EventResponse(events=found, source="kakao" if found else "none", message=msg)
+
+    found, source = await event_service.recommend(req.region, req.lat, req.lon, req.date,
+                                                  req.tags_a, req.tags_b, req.natural_input)
+    msg = "" if found else f"{req.region} 근처에서 전시·공연·체험 장소를 찾지 못했어요. 카페·식당 중심으로 코스를 짤게요."
+    return EventResponse(events=found, source=source, message=msg)
 
 
 @router.post("/generate", response_model=CourseResponse)

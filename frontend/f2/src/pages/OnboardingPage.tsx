@@ -4,12 +4,11 @@ import { C, FONT, GS_FORM } from "../constants/theme";
 import { DEFAULT_LAT, DEFAULT_LON, KAKAO_JS_KEY } from "../config";
 import { fetchWeather, geocodeCity, WEATHER_META } from "../api/weather";
 import type { WeatherSnapshot } from "../api/weather";
-import { generateCourses } from "../api/course";
 import { savePrefs } from "../api/prefs";
 import { usePlan } from "../contexts/PlanContext";
 import type { RegionValue } from "../contexts/PlanContext";
 import { mockCourses } from "../mocks/courseData";
-import { BUDGET_VALUES, budgetAt, budgetOverlap, coupleBudget, fmtBudget } from "../utils/budget";
+import { BUDGET_VALUES, budgetAt, budgetOverlap, fmtBudget } from "../utils/budget";
 import type { BudgetRange } from "../utils/budget";
 import { formatDateKo, todayStr } from "../utils/date";
 import RegionInput from "../components/onboarding/RegionInput";
@@ -105,24 +104,12 @@ export default function OnboardingPage() {
     setLoadingMsg(LOADING_STEPS[2]);
     await savePrefs(sessionId, tagsA, tagsB, budgetAt(overlap ? overlap.minIdx : budgetA.maxIdx));
 
-    setLoadingMsg(LOADING_STEPS[3]);
-    const budget = coupleBudget(budgetA, budgetB);
-    let courses = mockCourses;
-    try {
-      courses = await generateCourses({
-        sessionId, region: cityName, lat, lon, date: dateStr,
-        weather: weather.type, temp: weather.temp,
-        budgetMin: budget.min, budgetMax: budget.max, tagsA, tagsB,
-      });
-    } catch (e) {
-      console.warn("코스 생성 실패 → 샘플 데이터 사용", e);
-    }
-
+    // 코스는 이벤트를 고른 뒤 EventSelectPage 에서 생성 (선택한 이벤트를 중심으로 짜기 위해)
     startPlan(sessionId, {
       region: { name: cityName, lat, lon }, date: dateStr, tagsA, tagsB, budgetA, budgetB, weather,
-    }, courses);
+    }, mockCourses);
 
-    setLoadingMsg("결과 페이지로 이동합니다 ✦");
+    setLoadingMsg("이벤트를 추천하러 가요 ✦");
     await new Promise(r => setTimeout(r, 700));
     navigate("/events");
   };

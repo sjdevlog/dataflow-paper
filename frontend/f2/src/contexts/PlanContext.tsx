@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { CourseKey, GeneratedCourse } from "../types/course";
 import type { WeatherSnapshot } from "../api/weather";
 import type { BudgetRange } from "../utils/budget";
+import type { RecommendedEvent } from "../api/course";
 
 export type RegionValue = { name: string; lat: number | null; lon: number | null };
 
@@ -24,6 +25,8 @@ export interface Plan {
   courses: Record<CourseKey, GeneratedCourse>;
   selectedCourse: CourseKey;
   events: string[];
+  selectedEvent?: RecommendedEvent | null;
+  coursesReady?: boolean;   // 이벤트 선택 후 실제 코스를 받았는지 (false면 샘플 코스)
   createdAt: string;
 }
 
@@ -31,6 +34,7 @@ interface PlanCtx {
   plan: Plan | null;
   startPlan: (sessionId: string, input: PlanInput, courses: Record<CourseKey, GeneratedCourse>) => void;
   setEvents: (events: string[]) => void;
+  setCourses: (courses: Record<CourseKey, GeneratedCourse>, selectedEvent: RecommendedEvent | null) => void;
   selectCourse: (key: CourseKey) => void;
   removePlace: (key: CourseKey, placeName: string) => void;
   clearPlan: () => void;
@@ -67,6 +71,10 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     startPlan: (sessionId, input, courses) =>
       setPlan({ sessionId, input, courses, selectedCourse: "A", events: [], createdAt: new Date().toISOString() }),
     setEvents:    (events) => update(p => ({ ...p, events })),
+    setCourses:   (courses, selectedEvent) => update(p => ({
+      ...p, courses, selectedEvent, coursesReady: true, selectedCourse: "A",
+      events: selectedEvent ? [selectedEvent.name] : [],
+    })),
     selectCourse: (selectedCourse) => update(p => ({ ...p, selectedCourse })),
     removePlace:  (key, placeName) => update(p => ({
       ...p,

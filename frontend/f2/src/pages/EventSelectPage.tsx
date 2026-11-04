@@ -1,125 +1,161 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { C, FONT, GS } from "../constants/theme";
-import { usePlan } from "../contexts/PlanContext";
+import { useActivePlan } from "../contexts/PlanContext";
+import { fetchEvents, generateCourses } from "../api/course";
+import type { RecommendedEvent } from "../api/course";
+import { coupleBudget } from "../utils/budget";
+import { LOADING_STEPS } from "../constants/course";
 import PageHeader from "../components/common/PageHeader";
 import AiBubble from "../components/common/AiBubble";
+import LoadingScreen from "../components/onboarding/LoadingScreen";
 
-type Event = { icon: string; name: string; sub: string; category: string };
+const CAT_ICON: Record<string, string> = { 전시: "🎨", 공연: "🎭", 영화: "🎬", 팝업: "🛍️", 체험: "🧶" };
 
-const REGION_EVENTS: { keywords: string[]; events: Event[] }[] = [
-  {
-    keywords: ["성수", "뚝섬"],
-    events: [
-      { icon: "🎨", name: "OO 갤러리",    sub: "도시의 빛",       category: "전시" },
-      { icon: "👟", name: "무신사 X 팝업", sub: "마케팅 팝업",      category: "팝업" },
-      { icon: "🎬", name: "성수 시네마",   sub: "나의 아름다운",     category: "영화" },
-      { icon: "🎭", name: "소극장 행복",   sub: "연극",             category: "공연" },
-    ],
-  },
-  {
-    keywords: ["홍대", "합정", "상수"],
-    events: [
-      { icon: "🎵", name: "인디 공연",     sub: "버스킹 위크",      category: "공연" },
-      { icon: "🖼️", name: "갤러리 홍",    sub: "청년 작가전",       category: "전시" },
-      { icon: "🧁", name: "디저트 팝업",   sub: "베이킹 클래스",     category: "팝업" },
-      { icon: "🃏", name: "보드게임 카페", sub: "주말 토너먼트",      category: "활동" },
-    ],
-  },
-  {
-    keywords: ["강남", "신사", "압구정"],
-    events: [
-      { icon: "🛍️", name: "럭셔리 팝업", sub: "신상 컬렉션",       category: "팝업" },
-      { icon: "🎭", name: "예술의전당",   sub: "클래식 공연",        category: "공연" },
-      { icon: "🍷", name: "와인 페어",    sub: "가로수길 와인&푸드", category: "푸드" },
-      { icon: "🧖", name: "뷰티 팝업",   sub: "체험 이벤트",        category: "팝업" },
-    ],
-  },
-];
-
-const DEFAULT_EVENTS: Event[] = [
-  { icon: "🎨", name: "갤러리 전시",  sub: "현대 미술전",    category: "전시" },
-  { icon: "🎵", name: "공연·콘서트", sub: "주말 라이브",     category: "공연" },
-  { icon: "🛍️", name: "팝업 스토어", sub: "한정판 컬렉션",  category: "팝업" },
-  { icon: "🍽️", name: "푸드 페스타", sub: "지역 맛집 행사", category: "푸드" },
-];
-
-function getEventsForRegion(region: string): Event[] {
-  const match = REGION_EVENTS.find(r => r.keywords.some(k => region.includes(k)));
-  return match ? match.events : DEFAULT_EVENTS;
-}
-
+/** 메인 이벤트 선택 — 선택한 지역 근처에 실제로 있는 장소만 AI가 추천 (가짜 목록 없음) */
 export default function EventSelectPage() {
   const navigate = useNavigate();
-  const { plan, setEvents } = usePlan();
-  const region   = plan?.input.region.name || "성수동";
+  const { plan, setCourses } = useActivePlan();
+  const { region, date, tagsA, tagsB, budgetA, budgetB, weather } = plan.input;
 
-  const [events]                = useState<Event[]>(() => getEventsForRegion(region));
-  const [selected, setSelected] = useState<number[]>(
-    () => (plan?.events ?? []).map(name => events.findIndex(e => e.name === name)).filter(i => i >= 0)
-  );
-  const [showAI,   setShowAI]   = useState(false);
-  const [showCards, setShowCards] = useState(false);
+  const [events,   setEvents]   = useState<RecommendedEvent[]>([]);
+  const [message,  setMessage]  = useState("");
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(false);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [noMore,   setNoMore]   = useState(false);
+  const [selected, setSelected] = useState<string | null>(plan.selectedEvent?.name ?? null);
+  const [genMsg,   setGenMsg]   = useState("");
+  const started = useRef(false);
+
+  const base = { region: region.name, lat: region.lat, lon: region.lon, date, tagsA, tagsB };
+
+  const load = async () => {
+    setLoading(true); setError(false);
+    try {
+      const r = await fetchEvents(base);
+      setEvents(r.events); setMessage(r.message);
+    } catch (e) {
+      console.warn("이벤트 추천 실패", e);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const t1 = setTimeout(() => setShowAI(true),    400);
-    const t2 = setTimeout(() => setShowCards(true), 800);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    if (started.current) return;      // StrictMode 이중 실행 방지 (AI 호출은 한 번만)
+    started.current = true;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const toggle = (i: number) => {
-    setSelected(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]);
+  const loadMore = async () => {
+    setMoreBusy(true);
+    try {
+      const r = await fetchEvents({ ...base, more: true, exclude: events.map(e => e.name) });
+      if (r.events.length === 0) setNoMore(true);
+      setEvents(prev => [...prev, ...r.events]);
+    } catch {
+      setNoMore(true);
+    } finally {
+      setMoreBusy(false);
+    }
   };
 
-  const handleNext = () => {
-    setEvents(selected.map(i => events[i].name));
+  const handleNext = async () => {
+    const ev = events.find(e => e.name === selected) ?? null;
+    setGenMsg(LOADING_STEPS[3]);
+    const budget = coupleBudget(budgetA, budgetB);
+    try {
+      const courses = await generateCourses({
+        sessionId: plan.sessionId, region: region.name, lat: region.lat, lon: region.lon, date,
+        weather: weather.type, temp: weather.temp, budgetMin: budget.min, budgetMax: budget.max,
+        tagsA, tagsB, selectedEvent: ev, noEvent: !ev,
+      });
+      setCourses(courses, ev);
+    } catch (e) {
+      console.warn("코스 생성 실패 → 샘플 데이터 사용", e);
+    }
     navigate("/courses");
   };
+
+  if (genMsg) return <LoadingScreen message={genMsg} />;
+
+  const card = (ev: RecommendedEvent, i: number) => {
+    const isSel = selected === ev.name;
+    return (
+      <div key={ev.name} onClick={() => setSelected(isSel ? null : ev.name)} style={{
+        background:   isSel ? C.mainDim : C.card,
+        border:       `2px solid ${isSel ? C.mainDark : C.cardBorder}`,
+        borderRadius: 18, padding: "16px 14px", cursor: "pointer",
+        transition: "all 0.2s ease", position: "relative",
+        boxShadow:  isSel ? "0 4px 16px rgba(122,92,189,0.25)" : "0 2px 8px rgba(0,0,0,0.05)",
+        animation:  `popIn 0.35s ease ${Math.min(i, 6) * 0.06}s both`,
+      }}>
+        {isSel && <div style={{ position: "absolute", top: 10, right: 12, fontSize: 14, color: C.mainDark, fontWeight: 700 }}>✓</div>}
+        <div style={{ fontSize: 26, marginBottom: 6 }}>{CAT_ICON[ev.category] ?? "✨"}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: isSel ? C.mainDark : C.text, marginBottom: 4, lineHeight: 1.35 }}>{ev.name}</div>
+        <div style={{ fontSize: 11, color: C.textDim, background: isSel ? C.card : C.inputBg, padding: "2px 8px", borderRadius: 999, display: "inline-block", marginBottom: 6 }}>
+          {ev.category}
+        </div>
+        {ev.reason && <div style={{ fontSize: 11, color: C.text, lineHeight: 1.45, marginBottom: 4 }}>{ev.reason}</div>}
+        {ev.address && <div style={{ fontSize: 10.5, color: C.textMuted, lineHeight: 1.4 }}>{ev.address}</div>}
+      </div>
+    );
+  };
+
+  const nextLabel = selected ? `'${selected}' 중심으로 코스 짜줘 →`
+    : events.length ? "이벤트 없이 코스 짜줘 →" : "카페·식당 중심으로 코스 짜줘 →";
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, padding: "32px 20px 60px", fontFamily: FONT }}>
       <style>{GS}</style>
-
       <PageHeader label="이벤트 추천" />
 
-      {showAI && <AiBubble message={`지금 ${region}에서 이런 이벤트들이 진행 중이에요!`} hint="관심 있는 이벤트를 골라보세요" />}
-
-      {/* 이벤트 카드 2×2 그리드 */}
-      {showCards && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
-          {events.map((ev, i) => {
-            const isSel = selected.includes(i);
-            return (
-              <div key={i} onClick={() => toggle(i)} style={{
-                background:   isSel ? C.mainDim : C.card,
-                border:       `2px solid ${isSel ? C.mainDark : C.cardBorder}`,
-                borderRadius: 18, padding: "18px 14px", cursor: "pointer",
-                textAlign: "center", transition: "all 0.2s ease", position: "relative",
-                boxShadow:  isSel ? "0 4px 16px rgba(122,92,189,0.25)" : "0 2px 8px rgba(0,0,0,0.05)",
-                animation:  `popIn 0.35s ease ${i * 0.08}s both`,
-              }}>
-                {isSel && <div style={{ position: "absolute", top: 10, right: 12, fontSize: 14, color: C.mainDark, fontWeight: 700 }}>✓</div>}
-                <div style={{ fontSize: 30, marginBottom: 8 }}>{ev.icon}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: isSel ? C.mainDark : C.text, marginBottom: 3 }}>{ev.name}</div>
-                <div style={{ fontSize: 11, color: C.textDim, background: isSel ? C.mainDim : C.inputBg, padding: "2px 8px", borderRadius: "999px", display: "inline-block" }}>
-                  {ev.sub}
-                </div>
-              </div>
-            );
-          })}
+      {loading && (
+        <div style={{ textAlign: "center", padding: "60px 0" }}>
+          <div style={{ fontSize: 40, animation: "spin 1.6s linear infinite", display: "inline-block", color: C.main, marginBottom: 18 }}>◎</div>
+          <p style={{ color: C.text, fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{region.name} 근처 이벤트를 찾는 중</p>
+          <p style={{ color: C.textDim, fontSize: 13 }}>두 분의 취향에 맞는 실제 장소만 골라요 (20~40초)</p>
         </div>
       )}
 
-      {selected.length > 0 && (
-        <div style={{ background: C.mainDim, borderRadius: 12, padding: "10px 16px", marginBottom: 16, fontSize: 12, color: C.mainDark, fontWeight: 600, animation: "fadeUp 0.3s ease" }}>
-          선택됨: {selected.map(i => events[i]?.name).join(", ")}
+      {!loading && error && (
+        <div style={{ textAlign: "center", padding: "40px 0" }}>
+          <p style={{ color: C.text, fontSize: 14, marginBottom: 14 }}>이벤트를 불러오지 못했어요.</p>
+          <button onClick={load} style={{ padding: "10px 18px", borderRadius: 12, border: `1px solid ${C.cardBorder}`, background: C.card, color: C.mainDark, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
+            다시 시도
+          </button>
         </div>
       )}
 
-      {showCards && (
-        <button onClick={handleNext} style={{ width: "100%", padding: 16, background: C.mainDark, color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(90,68,128,0.3)", fontFamily: FONT, animation: "fadeUp 0.4s ease 0.4s both" }}>
-          {selected.length > 0 ? `${selected.length}개 이벤트 포함해서 코스 짜줘 →` : "이벤트 없이 코스 짜줘 →"}
-        </button>
+      {!loading && !error && (
+        <>
+          <AiBubble
+            message={events.length ? `${region.name} 근처에서 두 분께 맞는 이벤트를 찾았어요!` : message}
+            hint={events.length ? "하나를 고르면 그 장소를 중심으로 코스를 짜요" : undefined}
+          />
+
+          {events.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              {events.map(card)}
+            </div>
+          )}
+
+          {events.length > 0 && !noMore && (
+            <button onClick={loadMore} disabled={moreBusy} style={{ width: "100%", padding: 12, marginBottom: 22, background: C.card, color: C.mainDark, border: `1.5px dashed ${C.main}`, borderRadius: 14, fontSize: 13, fontWeight: 700, cursor: moreBusy ? "default" : "pointer", fontFamily: FONT }}>
+              {moreBusy ? "주변 장소를 더 찾는 중..." : "+ 더 보기"}
+            </button>
+          )}
+          {noMore && events.length > 0 && (
+            <p style={{ textAlign: "center", fontSize: 12, color: C.textDim, marginBottom: 22 }}>주변에서 더 찾을 수 있는 장소가 없어요.</p>
+          )}
+
+          <button onClick={handleNext} style={{ width: "100%", padding: 16, background: C.mainDark, color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(90,68,128,0.3)", fontFamily: FONT }}>
+            {nextLabel}
+          </button>
+        </>
       )}
     </div>
   );

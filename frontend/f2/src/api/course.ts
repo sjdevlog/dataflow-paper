@@ -17,6 +17,38 @@ export interface GenerateCourseInput {
   budgetMax: number;
   tagsA: string[];
   tagsB: string[];
+  selectedEvent?: RecommendedEvent | null;   // 사용자가 고른 메인 이벤트
+  noEvent?: boolean;                         // 주변에 이벤트 장소가 없어 이벤트 없이 짜는 경우
+}
+
+/** 백엔드가 추천한 메인 이벤트 (지역 반경 안에 실제로 있는 장소) */
+export interface RecommendedEvent {
+  name: string;
+  category: string;
+  address: string;
+  place_url: string;
+  latitude: number | null;
+  longitude: number | null;
+  reason: string;
+  source: "ai" | "kakao";
+}
+
+export interface EventsResult {
+  events: RecommendedEvent[];
+  source: "ai" | "kakao" | "ai+kakao" | "none";
+  message: string;
+}
+
+/** POST /course/events — 메인 이벤트 추천. more=true 면 AI 없이 주변 장소를 더 불러옴 */
+export function fetchEvents(input: {
+  region: string; lat: number; lon: number; date: string;
+  tagsA: string[]; tagsB: string[]; exclude?: string[]; more?: boolean;
+}): Promise<EventsResult> {
+  return postJson<EventsResult>("/course/events", {
+    region: input.region, lat: input.lat, lon: input.lon, date: input.date,
+    tags_a: input.tagsA, tags_b: input.tagsB,
+    exclude: input.exclude ?? [], more: input.more ?? false,
+  }, input.more ? 20000 : 150000);   // AI 추천은 20~60초, 더 보기는 카카오 검색만
 }
 
 const FALLBACK_TIMES = ["13:00", "15:30", "18:00", "20:00"];
@@ -84,6 +116,8 @@ export async function generateCourses(input: GenerateCourseInput): Promise<Recor
     budget_max: input.budgetMax,
     tags_a:     input.tagsA,
     tags_b:     input.tagsB,
+    selected_event: input.selectedEvent ?? null,
+    no_event:   input.noEvent ?? false,
   }, 240000);   // AI 에이전트(Gemini + 툴 호출)가 혼잡 시 2분 이상 걸림
 
   const [a, b] = data.courses ?? [];
