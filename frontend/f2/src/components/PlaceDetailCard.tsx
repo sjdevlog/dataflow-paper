@@ -32,6 +32,11 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
     }, [key, place.name, place.lat, place.lon, google]);
     const gLoading = google === undefined && res?.key !== key;
     const g = google !== undefined ? google : gLoading ? null : res?.g ?? null;
+    // 방문 요일의 영업시간 — 구글 weekday_hours에서 "토요일: 오전 11:30~오후 9:00" 줄을 찾는다
+    const visitDay = "일월화수목금토"[visitDate ? new Date(`${visitDate}T00:00:00`).getDay() : new Date().getDay()];
+    const gHours = g?.found ? g.weekday_hours?.find(l => l.startsWith(`${visitDay}요일`))?.replace(/^[^:]*:\s*/, "") : undefined;
+    const hours = place.openingHours || gHours;
+    const hasBizInfo = !!(hours || place.breakTime || place.closedDays);
 
     // 2인 예상 비용: 구글 1인 가격대 × 2명, 등록 안 된 곳은 '정보 없음'
     const cost = placeCost(g);
@@ -134,8 +139,8 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 </a>
             )}
 
-            {/* 영업 정보 — 영업시간, 브레이크 타임, 휴무일 */}
-            <div style={{
+            {/* 영업 정보 — 영업시간(방문 요일), 브레이크 타임, 휴무일. 정보가 하나도 없으면 숨김 */}
+            {hasBizInfo && <div style={{
                 background: '#f5f3fb',
                 borderRadius: '12px',
                 padding: '12px',
@@ -146,10 +151,10 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 <p style={{ fontSize: '11px', color: '#b8a9d9', margin: '0 0 4px 0', fontWeight: 600 }}>
                     영업 정보
                 </p>
-                {place.openingHours && (
+                {hours && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: '#888' }}>영업시간</span>
-                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#5a4480' }}>{place.openingHours}</span>
+                        <span style={{ fontSize: '12px', color: '#888' }}>영업시간{!place.openingHours && ` (${visitDay}요일)`}</span>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#5a4480' }}>{hours}</span>
                     </div>
                 )}
                 {place.breakTime && (
@@ -164,7 +169,7 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                         <span style={{ fontSize: '12px', fontWeight: 600, color: '#888' }}>{place.closedDays}</span>
                     </div>
                 )}
-            </div>
+            </div>}
 
             {/* 메뉴·비용 — 메뉴 정보가 있을 때만 목록을 보여주고, 없으면 예산 배분 기준 추정치임을 밝힌다 */}
             <div>

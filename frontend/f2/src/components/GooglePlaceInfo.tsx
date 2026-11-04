@@ -75,7 +75,7 @@ export function GoogleReviews({ g }: { g: GooglePlaceDetails }) {
                 {g.reviews.map((r, i) => (
                     <div key={i} style={{ background: soft, borderRadius: 12, padding: 12 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                            {r.author_photo && <img src={r.author_photo} alt="" width={22} height={22} style={{ borderRadius: "50%" }} />}
+                            {r.author_photo && <img src={r.author_photo} alt="" width={22} height={22} referrerPolicy="no-referrer" onError={e => { e.currentTarget.style.display = "none"; }} style={{ borderRadius: "50%" }} />}
                             <a href={r.author_uri || r.google_maps_uri} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 600, color: ink, textDecoration: "none" }}>{r.author}</a>
                             <span style={{ fontSize: 11, color: "#F4B400" }}>{stars(r.rating)}</span>
                             <span style={{ fontSize: 11, color: quiet, marginLeft: "auto" }}>{r.relative_time}</span>
