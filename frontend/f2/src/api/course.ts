@@ -86,6 +86,27 @@ export function alternativeToPlace(a: AlternativePlace, old: CoursePlace): Cours
   };
 }
 
+/** 구글 장소 상세 (저장하지 않고 카드 열 때마다 조회 — 구글 정책) */
+export interface GoogleReview {
+  author: string; author_uri: string; author_photo: string;
+  rating: number | null; relative_time: string; text: string; google_maps_uri: string;
+}
+export interface GooglePlaceDetails {
+  found: boolean; reason?: string;
+  name?: string; type_name?: string;
+  rating?: number | null; rating_count?: number | null;
+  price_min?: number | null; price_max?: number | null;
+  open_now?: boolean | null; next_close_time?: string | null; next_open_time?: string | null;
+  weekday_hours?: string[];
+  google_maps_uri?: string;
+  reviews?: GoogleReview[];
+  photos?: { url: string; author: string; author_uri: string }[];
+}
+
+export function fetchPlaceDetails(place: { name: string; lat: number; lon: number }): Promise<GooglePlaceDetails> {
+  return postJson<GooglePlaceDetails>("/course/place-details", place, 20000);
+}
+
 const FALLBACK_TIMES = ["13:00", "15:30", "18:00", "20:00"];
 
 export function mapCategory(cat: string): CoursePlace["category"] {

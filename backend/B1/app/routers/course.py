@@ -10,7 +10,7 @@ from app.services.weather import get_weather
 from app.services.kakao import geocode, transport_minutes
 from app.services.places import fetch_places
 from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course
-from app.services import ai_bridge, events as event_service, alternatives as alt_service
+from app.services import ai_bridge, events as event_service, alternatives as alt_service, google_places
 
 router = APIRouter()
 
@@ -173,6 +173,16 @@ async def recommend_alternatives(req: AlternativeRequest):
         nxt=(req.next.lat, req.next.lon) if req.next else None,
     )
     return AlternativeResponse(alternatives=alts, message="" if alts else "주변 1 km 안에서 바꿀 만한 곳을 찾지 못했어요.")
+
+
+@router.post("/place-details")
+async def place_details(req: dict):
+    """장소 상세 보강 (Google Places) — 별점·리뷰·사진·가격대·영업 상태. 저장하지 않고 요청 때마다 조회"""
+    try:
+        name, lat, lon = str(req["name"]), float(req["lat"]), float(req["lon"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="name, lat, lon 이 필요해요.")
+    return await google_places.details(name, lat, lon)
 
 
 @router.post("/generate", response_model=CourseResponse)

@@ -249,3 +249,51 @@ def test_alternatives_skip_closed_and_rank_by_fairness(client, monkeypatch):
     # 바(B 취향 2개 일치 vs A 0개) 와 카페(A 2개 vs B 0개)는 격차가 같으면 평균으로 비교 → 둘 다 후보
     assert set(names) == {"와인바 겸 카페", "조용한 카페"}
     assert data["alternatives"][0]["walk_from_prev"] is not None
+
+
+# ── 구글 장소 상세 (/course/place-details) ─────────────────────────
+import app.services.google_places as gp
+
+G_PLACE = {
+    "displayName": {"text": "보나리체타"}, "location": {"latitude": 37.3381, "longitude": 127.2662},
+    "rating": 5.0, "userRatingCount": 166, "primaryTypeDisplayName": {"text": "이탈리아 음식점"},
+    "priceRange": {"startPrice": {"currencyCode": "KRW", "units": "20000"}, "endPrice": {"currencyCode": "KRW", "units": "30000"}},
+    "currentOpeningHours": {"openNow": True, "weekdayDescriptions": ["월요일: 11:00~22:00"]},
+    "googleMapsUri": "https://maps.google.com/?cid=1",
+    "reviews": [{"rating": 5, "relativePublishTimeDescription": "3개월 전", "text": {"text": "분위기 좋아요"},
+                 "authorAttribution": {"displayName": "김지윤", "uri": "u", "photoUri": "p"}}],
+    "photos": [{"name": "places/x/photos/1", "authorAttributions": [{"displayName": "SH L", "uri": "u2"}]}],
+}
+
+
+def test_same_place_requires_nearby_and_similar_name():
+    assert gp.same_place("보나리체타", 37.3381, 127.2662, G_PLACE)
+    assert gp.same_place("보나리체타 외대점", 37.3382, 127.2663, G_PLACE)
+    assert not gp.same_place("전혀다른식당", 37.3381, 127.2662, G_PLACE)       # 이름 다름
+    assert not gp.same_place("보나리체타", 37.5665, 126.9780, G_PLACE)          # 서울시청 — 멀리 떨어짐
+
+
+def test_place_details_parses_google_fields(client, monkeypatch):
+    class FakeRes:
+        def __init__(self, data): self._d = data
+        def json(self): return self._d
+
+    class FakeClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, *a, **k): return FakeRes({"places": [G_PLACE]})
+        async def get(self, *a, **k): return FakeRes({"photoUri": "https://lh3.googleusercontent.com/x"})
+
+    monkeypatch.setenv("GOOGLE_PLACES_API_KEY", "test")
+    monkeypatch.setattr(gp.httpx, "AsyncClient", lambda **k: FakeClient())
+    d = client.post("/course/place-details", json={"name": "보나리체타", "lat": 37.3381, "lon": 127.2662}).json()
+    assert d["found"] and d["rating"] == 5.0 and d["rating_count"] == 166
+    assert (d["price_min"], d["price_max"]) == (20000, 30000) and d["type_name"] == "이탈리아 음식점"
+    assert d["reviews"][0]["author"] == "김지윤" and d["reviews"][0]["relative_time"] == "3개월 전"
+    assert d["photos"][0]["url"].startswith("https://") and "key" not in d["photos"][0]["url"]
+
+
+def test_place_details_without_key(client, monkeypatch):
+    monkeypatch.delenv("GOOGLE_PLACES_API_KEY", raising=False)
+    d = client.post("/course/place-details", json={"name": "x", "lat": 37.5, "lon": 127.0}).json()
+    assert d == {"found": False, "reason": "no_key"}

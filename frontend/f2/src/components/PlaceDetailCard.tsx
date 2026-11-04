@@ -1,4 +1,8 @@
+import { useEffect, useState } from "react";
 import type { CoursePlace } from "../types/course";
+import { fetchPlaceDetails } from "../api/course";
+import type { GooglePlaceDetails } from "../api/course";
+import { GooglePhotos, GoogleReviews, GoogleSummary } from "./GooglePlaceInfo";
 import PlaceActionButtonGroup from "./PlaceActionButtonGroup";
 import { isLikelyClosed } from "../utils/isLikelyClosed";
 
@@ -11,6 +15,22 @@ interface Props {
 }
 
 export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOther, onWishlist }: Props) {
+    // 구글 상세 — 정책상 저장하지 않고 카드를 열 때마다 조회 (결과는 어느 장소 것인지 key로 구분)
+    const key = `${place.name}|${place.lat}|${place.lon}`;
+    const [res, setRes] = useState<{ key: string; g: GooglePlaceDetails | null } | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        fetchPlaceDetails({ name: place.name, lat: place.lat, lon: place.lon })
+            .then(d => { if (!cancelled) setRes({ key, g: d.found ? d : null }); })
+            .catch(() => { if (!cancelled) setRes({ key, g: null }); });
+        return () => { cancelled = true; };
+    }, [key, place.name, place.lat, place.lon]);
+    const gLoading = res?.key !== key;
+    const g = gLoading ? null : res?.g ?? null;
+
+    // 2인 예상 비용: 구글 1인 가격대가 있으면 그 중간값 × 2, 없으면 예산 배분 추정치
+    const gMid = g?.price_min != null ? Math.round(((g.price_min + (g.price_max ?? g.price_min)) / 2) * 2 / 1000) * 1000 : null;
+
     return (
         <div style={{
             background: '#ffffff',
@@ -54,6 +74,10 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                     ✕
                 </button>
             </div>
+
+            {gLoading && <p style={{ fontSize: 12, color: '#bbb', margin: 0 }}>Google Maps 정보를 불러오는 중...</p>}
+            {g && <GoogleSummary g={g} />}
+            {g && <GooglePhotos g={g} />}
 
             {/* 장소 액션 버튼 — 건너뛰기, 다른 장소 추천, 찜하기, 공유하기 */}
             <PlaceActionButtonGroup
@@ -172,11 +196,20 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 )}
                 <div style={{ paddingTop: '10px', borderTop: '1px solid #e8e4f4', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <span style={{ fontSize: '13px', color: '#999' }}>
-                        예상 비용{place.recommendedMenus.length === 0 && <span style={{ fontSize: '11px', color: '#bbb' }}> (두 분 예산을 장소 수로 나눈 추정치)</span>}
+                        예상 비용 (2인)
+                        <span style={{ fontSize: '11px', color: '#bbb' }}>
+                            {gMid != null ? " · Google Maps 1인 가격대 기준" : place.recommendedMenus.length === 0 ? " · 두 분 예산을 장소 수로 나눈 추정치" : ""}
+                        </span>
                     </span>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#5a4480' }}>{place.estimatedCost.toLocaleString()}원</span>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#5a4480' }}>
+                        {gMid != null && g?.price_min != null
+                            ? `${(g.price_min * 2).toLocaleString()}~${((g.price_max ?? g.price_min) * 2).toLocaleString()}원`
+                            : `${place.estimatedCost.toLocaleString()}원`}
+                    </span>
                 </div>
             </div>
+
+            {g && <GoogleReviews g={g} />}
 
             {/* 폐점 경고 */}
             {(place.possiblyClosedWarning || isLikelyClosed(place.crawledAt, place.category)) && (
