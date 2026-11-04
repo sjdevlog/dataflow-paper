@@ -17,6 +17,7 @@ class CourseRequest(BaseModel):
     tags_m:        List[str] = []         # deprecated: tags_a 사용
     tags_f:        List[str] = []         # deprecated: tags_b 사용
     natural_input: Optional[str] = None
+    selected_event: Optional[dict] = None  # 사용자가 고른 메인 이벤트 (없으면 Pipeline 1 첫 번째)
 
 # 장소 정보
 class PlaceItem(BaseModel):
@@ -26,6 +27,7 @@ class PlaceItem(BaseModel):
     time:      str
     price:     int
     is_open:   bool
+    open_status: Optional[Literal["open", "closed", "unknown"]] = None  # check ② 판정
     latitude:  Optional[float] = None
     longitude: Optional[float] = None
     walk_minutes_to_next: Optional[int] = None
@@ -42,6 +44,7 @@ class CourseItem(BaseModel):
     avg_satisfaction_a: Optional[float] = None
     avg_satisfaction_b: Optional[float] = None
     fairness_gap:       Optional[float] = None
+    violations:         Optional[int] = None   # 영업시간 위반 장소 수 V(C)
 
 # 코스 생성 응답
 class CourseResponse(BaseModel):

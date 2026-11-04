@@ -1,8 +1,8 @@
 """카카오맵 페이지를 Playwright로 크롤링해서 영업시간을 확인하는 툴.
 
 설계:
-- 메모리 캐시 (TTL 30분) — 같은 장소 중복 방문 방지
-- 카카오 Local API로 place_url 조회 → Playwright로 페이지 로딩 → 영업시간 파싱
+- 카카오 Local API로 place_url 조회 → Playwright로 페이지 로딩 → 영업시간 텍스트 추출 (_scrape_hours)
+- 판정·캐시는 tools/hours_judge.py
 """
 
 import os
@@ -18,9 +18,7 @@ from tools.logger import log_tool
 
 load_dotenv()
 
-# 메모리 캐시: {place_name: (result_text, timestamp)}
-_cache: dict[str, tuple[str, float]] = {}
-CACHE_TTL = 30 * 60  # 30분
+# 캐시(30분 TTL)와 영업 여부 판정은 tools/hours_judge.py 에 있다.
 
 # 카카오맵 영업시간 셀렉터 후보 (페이지 구조 변경 대응)
 KAKAO_HOURS_SELECTORS = [
@@ -129,46 +127,34 @@ def _scrape_hours(place_url: str) -> str:
 
 @tool
 @log_tool
-def check_hours(place_name: str, visit_date: str = "") -> str:
-    """카카오맵에서 장소의 실제 영업시간을 확인합니다.
+def check_hours(place_name: str, visit_date: str = "", visit_time: str = "") -> str:
+    """장소가 방문 예정 날짜·시각에 영업 중인지 확인합니다.
+
+    카카오맵 페이지에서 영업시간을 읽어 판정합니다.
+    같은 장소를 30분 안에 다시 조회하면 캐시를 사용합니다.
 
     Args:
-        place_name: 확인할 장소 이름 (예: "성수 갤러리 카페")
-        visit_date: 방문 예정 날짜나 요일 (선택, 예: "2025-05-23 토요일")
+        place_name: 확인할 장소 이름 (예: "어니언 성수")
+        visit_date: 방문 날짜 YYYY-MM-DD (예: "2026-11-08")
+        visit_time: 방문 시각 HH:MM (예: "15:30")
 
     Returns:
-        영업시간 텍스트 + 카카오맵 링크. 같은 장소를 30분 안에 다시 조회하면 캐시 사용.
+        판정(open / closed / unknown), 영업시간 원문, 출처, 링크.
     """
-    cache_key = place_name
-    now = time.time()
-    cached = _cache.get(cache_key)
-    if cached and (now - cached[1]) < CACHE_TTL:
-        return f"[캐시] {cached[0]}"
+    from tools.hours_judge import get_hours, is_open_at, parse_visit
 
-    place_url = _get_kakao_url(place_name)
-    if not place_url:
-        result = f"{place_name}: 카카오맵에서 장소를 찾을 수 없음"
-        _cache[cache_key] = (result, now)
-        return result
-
-    try:
-        hours_text = _scrape_hours(place_url)
-        lines = [
-            f"[{place_name}]",
-            f"링크: {place_url}",
-            "",
-            hours_text,
-        ]
-        if visit_date:
-            lines.append("")
-            lines.append(f"방문 예정: {visit_date}")
-        result = "\n".join(lines)
-    except Exception as e:
-        result = (
-            f"{place_name}: 영업시간 조회 실패\n"
-            f"오류: {type(e).__name__}: {e}\n"
-            f"링크: {place_url}"
-        )
-
-    _cache[cache_key] = (result, now)
-    return result
+    info, hit = get_hours(place_name)
+    when = parse_visit(visit_date, visit_time)
+    verdict = is_open_at(info, when) if when else "unknown"
+    lines = [
+        f"[{place_name}]{' (캐시)' if hit else ''}",
+        f"판정: {verdict}" + ("" if when else " (방문 날짜·시각을 YYYY-MM-DD, HH:MM으로 주면 판정 가능)"),
+        f"출처: {info.source}",
+    ]
+    if info.place_url:
+        lines.append(f"링크: {info.place_url}")
+    if info.text:
+        lines += ["", info.text[:500]]
+    if info.error:
+        lines.append(f"참고: {info.error}")
+    return "\n".join(lines)

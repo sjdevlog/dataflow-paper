@@ -76,3 +76,19 @@ def log_tool(func):
             _log(record)
             raise
     return wrapper
+
+
+def session_tool_counts(sid: str) -> dict:
+    """세션 로그에서 툴별 호출 수를 센다 (실험의 비용 지표용)"""
+    counts: dict[str, int] = {}
+    log_file = LOG_DIR / f"{sid}.jsonl"
+    if not log_file.exists():
+        return counts
+    for line in log_file.read_text(encoding="utf-8").splitlines():
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("type") == "tool_call":
+            counts[rec["tool_name"]] = counts.get(rec["tool_name"], 0) + 1
+    return counts

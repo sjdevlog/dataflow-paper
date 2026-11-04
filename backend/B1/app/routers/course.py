@@ -1,19 +1,22 @@
+import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from app.database import get_db
 from app.models.user import UserPreference
 from app.schemas.course import CourseRequest, CourseResponse, CourseItem, PlaceItem
 from app.services.weather import get_weather
 from app.services.kakao import geocode, transport_minutes
 from app.services.places import fetch_places
-from app.services.scoring import satisfaction, course_metrics
+from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course
 from app.services import ai_bridge
 
 router = APIRouter()
 
 MIN_BUDGET    = 10000
-AI_TIME_SLOTS = ["13:00", "15:00", "17:00", "19:00"]
+AI_N_CANDIDATES = 3                                      # Pipeline 2가 만드는 코스 후보 수 |𝒞|
+FAIR_LAMBDA     = float(os.getenv("FAIR_LAMBDA", "1.0"))  # 식 (4)의 λ (0이면 공정성 미고려)
 
 # B2 폴백 코스 구성: (카테고리, 후보 인덱스, 시간, 예산 비율)
 COURSE_A_PLAN = [("카페", 0, "13:00", 0.15), ("식당", 0, "18:00", 0.50), ("바", 0, "20:00", 0.35)]
@@ -78,42 +81,70 @@ async def fill_transport(places: list[PlaceItem]) -> None:
         cur.car_minutes_to_next = car_min
 
 
-def build_course(title: str, places: list[PlaceItem], budget: int, source: str) -> CourseItem:
+def build_course(title: str, places: list[PlaceItem], budget: int, source: str,
+                 violations: int | None = None) -> CourseItem:
     metrics = course_metrics(
         [p.satisfaction_a for p in places if p.satisfaction_a is not None],
         [p.satisfaction_b for p in places if p.satisfaction_b is not None],
     )
-    return CourseItem(title=title, total_price=budget, places=places, source=source, **metrics)
+    return CourseItem(title=title, total_price=budget, places=places, source=source,
+                      violations=violations, **metrics)
 
 
 async def ai_course_places(req: CourseRequest, mood: str, weather: dict, budget: int,
-                           tags_a: list[str], tags_b: list[str]) -> list[PlaceItem]:
-    events = ai_bridge.recommend_events(
-        natural_language=req.natural_input or f"{req.region}에서 {mood} 데이트",
-        weather={"condition": weather.get("description", ""), "temp_celsius": weather.get("temperature", 20)},
-        area=req.region,
-        visit_date=req.date,
-    )[:len(AI_TIME_SLOTS)]
-    if not events:
-        return []
+                           tags_a: list[str], tags_b: list[str]) -> tuple[list[PlaceItem], int | None]:
+    """AI 경로: 메인 이벤트 → Pipeline 2 코스 후보 + 영업시간 더블체크 → 공정성 기반 선택 (논문 식 (5)).
 
+    실패하면 ([], None) — 호출 측에서 B2로 폴백.
+    """
+    wx = {"condition": weather.get("description", ""), "temp_celsius": weather.get("temperature", 20)}
+    event = req.selected_event
+    if not event:
+        events = await run_in_threadpool(
+            ai_bridge.recommend_events,
+            natural_language=req.natural_input or f"{req.region}에서 {mood} 데이트",
+            weather=wx, area=req.region, visit_date=req.date,
+        )
+        if not events:
+            return [], None
+        event = events[0]
+
+    result = await run_in_threadpool(
+        ai_bridge.generate_course,
+        selected_event=event, weather=wx, visit_date=req.date,
+        tags_a=tags_a, tags_b=tags_b, n_courses=AI_N_CANDIDATES, verify=True,
+    )
+    courses = [c for c in result.get("courses", []) if c.get("places")]
+    if not courses:
+        return [], None
+
+    candidates = [
+        {"categories": [p.get("category", "") for p in c["places"]], "violations": c.get("violations", 0)}
+        for c in courses
+    ]
+    idx, _ = select_fair_course(candidates, tags_a, tags_b, lam=FAIR_LAMBDA)
+    chosen = courses[idx]
+
+    raw = chosen["places"]
     places = []
-    for event, time in zip(events, AI_TIME_SLOTS):
-        category = event.get("category", "기타")
-        lat, lon = await geocode(event.get("name", ""))
+    for p in raw:
+        category = normalize_category(p.get("category"))
+        lat, lon = await geocode(f"{req.region} {p.get('name', '')}")
+        status = p.get("open_status")
         places.append(PlaceItem(
-            name=event.get("name", ""),
+            name=p.get("name", ""),
             category=category,
             region=req.region,
-            time=time,
-            price=int(budget / len(events)),
-            is_open=True,
+            time=p.get("time", ""),
+            price=int(budget / len(raw)),
+            is_open=status != "closed",
+            open_status=status,
             latitude=lat,
             longitude=lon,
             satisfaction_a=satisfaction(tags_a, category),
             satisfaction_b=satisfaction(tags_b, category),
         ))
-    return places
+    return places, chosen.get("violations")
 
 
 @router.post("/generate", response_model=CourseResponse)
@@ -139,7 +170,7 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
         ]
 
     # A안: AI 추천 성공 시 AI 코스, 실패 시 B2 폴백
-    places_a = await ai_course_places(req, mood, weather, budget, tags_a, tags_b)
+    places_a, violations_a = await ai_course_places(req, mood, weather, budget, tags_a, tags_b)
     source_a = "ai" if places_a else "b2"
     if not places_a:
         places_a = await b2_places(COURSE_A_PLAN)
@@ -156,7 +187,7 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
         budget_max=budget,
         weather=wx_desc,
         courses=[
-            build_course(f"차분한 감성 코스 ({wx_desc})", places_a, budget, source_a),
+            build_course(f"차분한 감성 코스 ({wx_desc})", places_a, budget, source_a, violations_a),
             build_course(f"액티브 핫플 코스 ({wx_desc})", places_b, budget, "b2"),
         ],
     )

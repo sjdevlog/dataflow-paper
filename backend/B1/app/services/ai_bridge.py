@@ -23,3 +23,30 @@ def recommend_events(natural_language: str, weather: dict, area: str, visit_date
     if result.get("error"):
         print(f">>> AI 추천 실패: {result['error']}")
     return result.get("events", [])
+
+
+def generate_course(selected_event: dict, weather: dict, visit_date: str | None,
+                    tags_a: list[str], tags_b: list[str],
+                    n_courses: int = 3, verify: bool = True) -> dict:
+    """AI Pipeline 2 호출 (코스 후보 생성 + 영업시간 더블체크).
+
+    실패하면 {"courses": [], "error": ...} — 호출 측에서 B2로 폴백.
+    """
+    try:
+        from agents.pipeline2 import generate_course as _generate
+    except Exception as e:
+        print(f">>> AI 모듈 import 실패 ({AI_PATH}): {e}")
+        return {"courses": [], "error": f"import: {e}"}
+
+    result = _generate(
+        selected_event=selected_event,
+        weather=weather,
+        visit_date=visit_date,
+        n_courses=n_courses,
+        verify=verify,
+        tags_a=tags_a,
+        tags_b=tags_b,
+    )
+    if result.get("error"):
+        print(f">>> AI 코스 생성 실패: {result['error']}")
+    return result
