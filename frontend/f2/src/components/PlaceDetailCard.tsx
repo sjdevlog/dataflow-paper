@@ -93,22 +93,6 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 onClose={onClose}
             />
 
-            {/* 웨이팅 + 공간 유형 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ background: '#f5f3fb', borderRadius: '12px', padding: '12px' }}>
-                    <p style={{ fontSize: '11px', color: '#b8a9d9', margin: '0 0 4px 0', fontWeight: 600 }}>현재 웨이팅</p>
-                    <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#5a4480', margin: 0 }}>
-                        {place.waitingTime ?? '정보 없음'}
-                    </p>
-                </div>
-                <div style={{ background: '#f5f3fb', borderRadius: '12px', padding: '12px' }}>
-                    <p style={{ fontSize: '11px', color: '#b8a9d9', margin: '0 0 4px 0', fontWeight: 600 }}>공간 유형</p>
-                    <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#5a4480', margin: 0 }}>
-                        {place.spaceType === 'indoor' ? '실내' : place.spaceType === 'outdoor' ? '실외' : '복합'}
-                    </p>
-                </div>
-            </div>
-
             {/* 입장료 */}
             {place.admissionFee !== undefined && place.admissionFee > 0 && (
                 <div style={{

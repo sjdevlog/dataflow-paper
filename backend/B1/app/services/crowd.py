@@ -76,9 +76,10 @@ async def popular_times(name: str, lat: float, lon: float) -> dict:
                 if not cand:
                     return {"found": False, "reason": "not_matched"}
                 place = cand
-                if not place.get("popular_times") and cand.get("place_id"):
-                    detail = (await client.get(SERPAPI_URL, params={**base, "place_id": cand["place_id"]})).json()
-                    place = detail.get("place_results") or place
+            # 인기 시간대는 장소 상세(place_id 조회)에만 들어 있는 경우가 많아, 없으면 한 번 더 조회
+            if not place.get("popular_times") and place.get("place_id"):
+                detail = (await client.get(SERPAPI_URL, params={**base, "place_id": place["place_id"]})).json()
+                place = detail.get("place_results") or place
     except Exception as e:
         return {"found": False, "reason": f"error: {type(e).__name__}"}
 
