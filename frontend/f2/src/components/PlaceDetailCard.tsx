@@ -12,21 +12,23 @@ interface Props {
     onSkip: (place: CoursePlace) => void;       // 이 장소 건너뛰기
     onRecommendOther: (place: CoursePlace) => void; // 다른 장소 추천
     onWishlist: (place: CoursePlace) => void;    // 찜하기
+    google?: GooglePlaceDetails | null;          // 결과 화면에서 이미 받아온 구글 상세 (없으면 카드가 직접 조회)
 }
 
-export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOther, onWishlist }: Props) {
+export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOther, onWishlist, google }: Props) {
     // 구글 상세 — 정책상 저장하지 않고 카드를 열 때마다 조회 (결과는 어느 장소 것인지 key로 구분)
     const key = `${place.name}|${place.lat}|${place.lon}`;
     const [res, setRes] = useState<{ key: string; g: GooglePlaceDetails | null } | null>(null);
     useEffect(() => {
+        if (google !== undefined) return;     // 결과 화면이 이미 받아 둔 경우 다시 호출하지 않음
         let cancelled = false;
         fetchPlaceDetails({ name: place.name, lat: place.lat, lon: place.lon })
             .then(d => { if (!cancelled) setRes({ key, g: d.found ? d : null }); })
             .catch(() => { if (!cancelled) setRes({ key, g: null }); });
         return () => { cancelled = true; };
-    }, [key, place.name, place.lat, place.lon]);
-    const gLoading = res?.key !== key;
-    const g = gLoading ? null : res?.g ?? null;
+    }, [key, place.name, place.lat, place.lon, google]);
+    const gLoading = google === undefined && res?.key !== key;
+    const g = google !== undefined ? google : gLoading ? null : res?.g ?? null;
 
     // 2인 예상 비용: 구글 1인 가격대가 있으면 그 중간값 × 2, 없으면 예산 배분 추정치
     const gMid = g?.price_min != null ? Math.round(((g.price_min + (g.price_max ?? g.price_min)) / 2) * 2 / 1000) * 1000 : null;

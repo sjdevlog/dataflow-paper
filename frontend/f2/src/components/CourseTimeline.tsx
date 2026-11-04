@@ -1,12 +1,14 @@
 import type { CoursePlace } from "../types/course";
 import CoursePlaceItem from "./CoursePlaceItem";
+import type { PlaceCost } from "../utils/cost";
 
 interface Props {
     places: CoursePlace[];
     onSelectPlace: (place: CoursePlace) => void;
+    costs?: PlaceCost[];
 }
 
-export default function CourseTimeline({ places, onSelectPlace }: Props) {
+export default function CourseTimeline({ places, onSelectPlace, costs }: Props) {
     return (
         <div style={{ padding: '0 16px' }}>
             <h2 style={{ color: "#888", fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>
@@ -16,7 +18,7 @@ export default function CourseTimeline({ places, onSelectPlace }: Props) {
             {places.map((place, index) => (
                 <div key={index}>
                     {/* 장소 아이템 */}
-                    <CoursePlaceItem place={place} onClick={onSelectPlace} />
+                    <CoursePlaceItem place={place} onClick={onSelectPlace} cost={costs?.[index]} />
 
                     {/* 마지막 장소가 아닐 때만 이동 시간 점선 표시 */}
                     {index < places.length - 1 && (

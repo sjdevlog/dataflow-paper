@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CourseKey, CoursePlace } from "../types/course";
 import { COURSE_LABEL } from "../constants/course";
@@ -12,8 +12,9 @@ import { getWeatherEmoji } from "../utils/getWeatherEmoji";
 import { coupleBudget, fmtWon } from "../utils/budget";
 import { dayOfWeekKo, formatDateShort } from "../utils/date";
 import { commonTags } from "../utils/tags";
-import { fetchAlternatives, alternativeToPlace } from "../api/course";
-import type { AlternativePlace } from "../api/course";
+import { fetchAlternatives, alternativeToPlace, fetchPlaceDetails } from "../api/course";
+import type { AlternativePlace, GooglePlaceDetails } from "../api/course";
+import { placeCost, placeKey, fmtRange } from "../utils/cost";
 
 export default function CourseResultPage() {
   const navigate = useNavigate();
@@ -56,7 +57,25 @@ export default function CourseResultPage() {
 
   const budgetRange = coupleBudget(input.budgetA, input.budgetB);
   const budget = budgetRange.max;
-  const totalCost = places.reduce((sum, p) => sum + p.estimatedCost, 0);
+  // 구글 상세(가격대 등) — 화면을 보는 동안만 메모리에 두고 저장하지 않음 (구글 정책)
+  const [google, setGoogle] = useState<Record<string, GooglePlaceDetails | null>>({});
+  const missing = places.filter(p => !(placeKey(p) in google)).map(placeKey).join(",");
+  useEffect(() => {
+    if (!missing) return;
+    let cancelled = false;
+    places.filter(p => missing.split(",").includes(placeKey(p))).forEach(p => {
+      fetchPlaceDetails({ name: p.name, lat: p.lat, lon: p.lon })
+        .then(d => { if (!cancelled) setGoogle(prev => ({ ...prev, [placeKey(p)]: d.found ? d : null })); })
+        .catch(() => { if (!cancelled) setGoogle(prev => ({ ...prev, [placeKey(p)]: null })); });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missing]);
+
+  const costs = places.map(p => placeCost(p, google[placeKey(p)]));
+  const totalCost = costs.reduce((s, c) => s + c.mid, 0);
+  const totalRange = { min: costs.reduce((s, c) => s + c.min, 0), max: costs.reduce((s, c) => s + c.max, 0), mid: totalCost, source: "google" as const };
+  const nGoogle = costs.filter(c => c.source === "google").length;
   const isOverBudget = totalCost > budget;
 
   // 선택한 날짜 기준 휴무 장소 체크
@@ -135,7 +154,7 @@ export default function CourseResultPage() {
           <span style={{ fontSize: "13px", color: "#888" }}>예상 총 비용</span>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontSize: "14px", fontWeight: 700, color: isOverBudget ? "#e05555" : "#5a4480" }}>
-              {totalCost.toLocaleString()}원
+              {fmtRange(totalRange)}
             </span>
             <span style={{ fontSize: "11px", color: "#bbb", marginLeft: "6px" }}>
               A+B 합산 {fmtWon(budgetRange.min)} ~ {fmtWon(budgetRange.max)}
@@ -155,8 +174,11 @@ export default function CourseResultPage() {
         </div>
         <div style={{ marginTop: "6px", fontSize: "12px", color: isOverBudget ? "#e05555" : "#b8a9d9", textAlign: "right" }}>
           {isOverBudget
-            ? `⚠️ ${(totalCost - budget).toLocaleString()}원 초과`
-            : `${(budget - totalCost).toLocaleString()}원 남음`}
+            ? `⚠️ 중간값 기준 ${(totalCost - budget).toLocaleString()}원 초과`
+            : `중간값 기준 ${(budget - totalCost).toLocaleString()}원 남음`}
+        </div>
+        <div style={{ marginTop: "2px", fontSize: "11px", color: "#bbb", textAlign: "right" }}>
+          {places.length}곳 중 {nGoogle}곳은 Google Maps 1인 가격대 × 2명, 나머지는 예산 배분 추정
         </div>
       </div>
 
@@ -180,7 +202,7 @@ export default function CourseResultPage() {
               ))}
             </div>
           )}
-          <CourseTimeline places={places} onSelectPlace={setSelectedPlace} />
+          <CourseTimeline places={places} onSelectPlace={setSelectedPlace} costs={costs} />
         </div>
       </div>
 
@@ -195,6 +217,7 @@ export default function CourseResultPage() {
               setSelectedPlace(null);
             }}
             onRecommendOther={openAlternatives}
+            google={placeKey(selectedPlace) in google ? google[placeKey(selectedPlace)] : undefined}
             onWishlist={(place) => console.log("찜하기:", place.name)}
           />
         </div>

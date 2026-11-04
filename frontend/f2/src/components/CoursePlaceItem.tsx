@@ -1,13 +1,16 @@
 import type { CoursePlace } from "../types/course";
+import type { PlaceCost } from "../utils/cost";
+import { fmtRange } from "../utils/cost";
 import { isLikelyClosed } from "../utils/isLikelyClosed";
 // 크롤링 날짜 기반 폐점 가능성 자동 판단
 
 interface Props {
     place: CoursePlace;
     onClick: (place: CoursePlace) => void;
+    cost?: PlaceCost;
 }
 
-export default function CoursePlaceItem({ place, onClick }: Props) {
+export default function CoursePlaceItem({ place, onClick, cost }: Props) {
     return (
         <div
             onClick={() => onClick(place)}
@@ -58,9 +61,9 @@ export default function CoursePlaceItem({ place, onClick }: Props) {
             </div>
 
             <div style={{ margin: '6px 0 0 52px', fontSize: '12px', color: '#888' }}>
-                예상 비용 {place.estimatedCost.toLocaleString()}원
-                <span style={{ marginLeft: '8px', color: place.budgetRatio >= 75 ? 'orange' : '#aaa' }}>
-                    (전체 예산의 {place.budgetRatio}%)
+                예상 비용 (2인) {cost ? fmtRange(cost) : `${place.estimatedCost.toLocaleString()}원`}
+                <span style={{ marginLeft: '8px', color: '#aaa' }}>
+                    {cost?.source === "google" ? "· Google Maps 가격대 기준" : "· 예산 배분 추정"}
                 </span>
             </div>
         </div>
