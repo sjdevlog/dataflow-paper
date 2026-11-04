@@ -62,28 +62,68 @@ def _near(r: dict, lat: float, lon: float) -> bool:
     return haversine_meters(lat, lon, g["latitude"], g["longitude"]) <= MATCH_RADIUS_M
 
 
+INFO_KO = {  # hl=en 응답의 혼잡 문구를 한국어로
+    "usually not busy": "보통 한산함",
+    "usually not too busy": "보통 붐비지 않음",
+    "usually a little busy": "보통 조금 붐빔",
+    "usually as busy as it gets": "보통 가장 붐빔",
+    "usually busy": "보통 붐빔",
+    "not busy": "한산함",
+    "not too busy": "붐비지 않음",
+    "a little busy": "조금 붐빔",
+    "as busy as it gets": "가장 붐빔",
+    "busier than usual": "평소보다 붐빔",
+}
+
+
+def _ko(info: str) -> str:
+    return INFO_KO.get((info or "").strip().lower(), info or "")
+
+
+def _detail_params(place: dict) -> dict | None:
+    """장소 상세 조회 파라미터: place_id, 없으면 data_id로 만든 data 값"""
+    if place.get("place_id"):
+        return {"place_id": place["place_id"]}
+    g = place.get("gps_coordinates") or {}
+    if place.get("data_id") and "latitude" in g:
+        return {"type": "place", "data": f"!4m5!3m4!1s{place['data_id']}!8m2!3d{g['latitude']}!4d{g['longitude']}"}
+    return None
+
+
 async def popular_times(name: str, lat: float, lon: float) -> dict:
     if not _key():
         return {"found": False, "reason": "no_key"}
-    base = {"engine": "google_maps", "hl": "ko", "gl": "kr", "api_key": _key()}
+    base = {"engine": "google_maps", "gl": "kr", "api_key": _key()}
+    stage = "search"
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            data = (await client.get(SERPAPI_URL, params={**base, "type": "search", "q": name,
+            data = (await client.get(SERPAPI_URL, params={**base, "hl": "ko", "type": "search", "q": name,
                                                           "ll": f"@{lat},{lon},17z"})).json()
+            if data.get("error"):
+                return {"found": False, "reason": "serpapi_error", "detail": str(data["error"])[:200]}
             place = data.get("place_results")
             if not place or not _near(place, lat, lon):
                 cand = next((r for r in data.get("local_results") or [] if _near(r, lat, lon)), None)
                 if not cand:
                     return {"found": False, "reason": "not_matched"}
                 place = cand
-            # 인기 시간대는 장소 상세(place_id 조회)에만 들어 있는 경우가 많아, 없으면 한 번 더 조회
-            if not place.get("popular_times") and place.get("place_id"):
-                detail = (await client.get(SERPAPI_URL, params={**base, "place_id": place["place_id"]})).json()
-                place = detail.get("place_results") or place
+            # 인기 시간대는 장소 상세에만 들어 있고, 한국어(hl=ko) 응답에는 빠지는 경우가 있어
+            # 없으면 영어(hl=en) 상세로 한 번 더 조회한다 (문구는 한국어로 바꿔 보여줌)
+            if not place.get("popular_times"):
+                params = _detail_params(place)
+                if params:
+                    stage = "detail_en"
+                    detail = (await client.get(SERPAPI_URL, params={**base, "hl": "en", **params})).json()
+                    place = detail.get("place_results") or place
     except Exception as e:
         return {"found": False, "reason": f"error: {type(e).__name__}"}
 
     pt = place.get("popular_times")
-    if not pt:
-        return {"found": False, "reason": "no_popular_times"}
-    return {"found": True, **parse_popular_times(pt)}
+    if not pt or not pt.get("graph_results"):
+        return {"found": False, "reason": "no_popular_times", "stage": stage}
+    out = parse_popular_times(pt)
+    for rows in out["days"].values():
+        for r in rows:
+            r["info"] = _ko(r["info"])
+    out["live_info"] = _ko(out["live_info"])
+    return {"found": True, **out}
