@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import user, course, weather, chat, auth
-from app.models.auth import LocalAuth
+from app.models.auth import LocalAuth, CoupleProfile  # noqa: F401 (테이블 자동 생성용)
 from app.database import Base, engine
 
 Base.metadata.create_all(bind=engine)  # local_auth 테이블 자동 생성

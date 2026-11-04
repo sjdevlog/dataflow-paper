@@ -5,6 +5,7 @@ export interface SharedCourse {
   region: string;
   date: string;
   course: CourseKey;
+  title?: string;   // 코스 이름 (취향 태그로 지은 이름)
   places: Pick<CoursePlace, "time" | "name" | "category" | "openingHours">[];
 }
 

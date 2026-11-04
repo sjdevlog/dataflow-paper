@@ -15,3 +15,13 @@ class LocalAuth(Base):
     nickname     = Column(String(50), nullable=False)
     gender       = Column(String(10), nullable=False, default="N")
     created_at   = Column(DateTime, default=utcnow)
+
+
+class CoupleProfile(Base):
+    """두 사람 이름 — 'A님·B님' 대신 화면에 쓸 이름 (계정당 1개)"""
+    __tablename__ = "couple_profile"
+
+    user_id      = Column(String, primary_key=True)          # local_auth.user_id
+    my_name      = Column(String(20), nullable=False, default="")
+    partner_name = Column(String(20), nullable=False, default="")
+    updated_at   = Column(DateTime, default=utcnow, onupdate=utcnow)

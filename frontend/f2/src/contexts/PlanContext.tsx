@@ -16,6 +16,8 @@ export interface PlanInput {
   budgetA: BudgetRange;
   budgetB: BudgetRange;
   weather: WeatherSnapshot;
+  nameA?: string;   // 화면에 'A님' 대신 쓸 이름 (없으면 A)
+  nameB?: string;
 }
 
 /** 온보딩 → 이벤트 → 코스 선택 → 결과 → 예약 → 완료 까지 공유하는 상태 */

@@ -392,3 +392,36 @@ def test_geocode_searches_near_region_first(monkeypatch):
     lat, lon = asyncio.run(kakao.geocode("차만다 성수", near=(37.5444, 127.0374)))
     assert (lat, lon) == (37.54, 127.04)
     assert calls[0]["radius"] == kakao.GEOCODE_RADIUS_M and calls[0]["query"] == "차만다 성수"
+
+
+# ── 코스 이름: 반영된 취향 태그로 짓기 ───────────────────────────────
+def test_course_title_uses_matched_tags_and_avoids_duplicates():
+    from app.services.scoring import course_title
+    a_tags = ["조용한 분위기", "전시·문화", "감성 카페"]
+    b_tags = ["활기찬 분위기", "맛집 탐방"]
+    t1 = course_title(["식당", "전시", "식당"], a_tags, b_tags)
+    assert t1 == "맛집 탐방 · 전시·문화 코스"          # 반대 분위기 태그 둘을 붙이지 않음
+    t2 = course_title(["식당", "전시", "식당"], a_tags, b_tags, avoid=t1)
+    assert t2 != t1
+    assert course_title(["기타"], [], [], fallback="추천 코스 1") == "추천 코스 1"
+
+
+def test_generate_titles_follow_tags(client, monkeypatch):
+    monkeypatch.setattr(course.ai_bridge, "recommend_events", lambda **k: [])
+    monkeypatch.setattr(course.ai_bridge, "generate_course", lambda **k: {"courses": []})
+    a, b = client.post("/course/generate", json=REQUEST).json()["courses"]
+    assert "차분한" not in a["title"] and "액티브" not in b["title"]
+    assert a["title"] != b["title"]
+
+
+# ── 두 사람 이름 저장 ───────────────────────────────────────────────
+def test_profile_names_saved_per_account(client):
+    import uuid
+    u = f"nm{uuid.uuid4().hex[:8]}"
+    tok = client.post("/auth/register", json={"username": u, "password": "Abcd1234!", "nickname": "수정"}).json()["access_token"]
+    h = {"Authorization": f"Bearer {tok}"}
+    assert client.get("/auth/profile", headers=h).json() == {"my_name": "수정", "partner_name": ""}
+    assert client.put("/auth/profile", headers=h, json={"my_name": " 수정 ", "partner_name": "민수"}).status_code == 200
+    assert client.get("/auth/profile", headers=h).json() == {"my_name": "수정", "partner_name": "민수"}
+    assert client.get("/auth/profile").status_code == 401
+    assert client.put("/auth/profile", headers=h, json={"my_name": "가" * 21}).status_code == 422

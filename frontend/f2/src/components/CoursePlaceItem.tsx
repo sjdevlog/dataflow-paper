@@ -8,9 +8,11 @@ interface Props {
     place: CoursePlace;
     onClick: (place: CoursePlace) => void;
     cost?: PlaceCost;
+    nameA?: string;
+    nameB?: string;
 }
 
-export default function CoursePlaceItem({ place, onClick, cost }: Props) {
+export default function CoursePlaceItem({ place, onClick, cost, nameA = "A", nameB = "B" }: Props) {
     return (
         <div
             onClick={() => onClick(place)}
@@ -44,7 +46,7 @@ export default function CoursePlaceItem({ place, onClick, cost }: Props) {
 
             <div style={{ margin: '8px 0 0 52px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#888', minWidth: '30px' }}>A님</span>
+                    <span style={{ fontSize: '12px', color: '#888', minWidth: '30px' }}>{nameA}님</span>
                     <div style={{ flex: 1, height: '6px', background: '#eee', borderRadius: '3px' }}>
                         <div style={{ width: `${place.satisfactionA}%`, height: '100%', background: '#C9B8E8', borderRadius: '3px' }} />
                     </div>
@@ -52,7 +54,7 @@ export default function CoursePlaceItem({ place, onClick, cost }: Props) {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '12px', color: '#888', minWidth: '30px' }}>B님</span>
+                    <span style={{ fontSize: '12px', color: '#888', minWidth: '30px' }}>{nameB}님</span>
                     <div style={{ flex: 1, height: '6px', background: '#eee', borderRadius: '3px' }}>
                         <div style={{ width: `${place.satisfactionB}%`, height: '100%', background: '#B8C9F2', borderRadius: '3px' }} />
                     </div>

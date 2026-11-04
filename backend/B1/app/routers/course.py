@@ -9,7 +9,7 @@ from app.schemas.course import CourseRequest, CourseResponse, CourseItem, PlaceI
 from app.services.weather import get_weather
 from app.services.kakao import geocode, transport_minutes
 from app.services.places import fetch_places
-from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course
+from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course, course_title
 from app.services import ai_bridge, events as event_service, alternatives as alt_service, google_places, crowd
 
 router = APIRouter()
@@ -239,6 +239,10 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
         places_b.insert(1, ev_place)
     await fill_transport(places_b)
 
+    # 코스 이름: 고른 취향 중 실제로 반영된 태그로 짓는다 (두 코스 이름이 겹치지 않게)
+    title_a = course_title([p.category for p in places_a], tags_a, tags_b, fallback="추천 코스 1")
+    title_b = course_title([p.category for p in places_b], tags_a, tags_b, avoid=title_a, fallback="추천 코스 2")
+
     return CourseResponse(
         course_id=str(uuid.uuid4()),
         user_id=req.user_id,
@@ -246,8 +250,8 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
         budget_max=budget,
         weather=wx_desc,
         courses=[
-            build_course(f"차분한 감성 코스 ({wx_desc})", places_a, budget, source_a, violations_a),
-            build_course(f"액티브 핫플 코스 ({wx_desc})", places_b, budget, "b2"),
+            build_course(title_a, places_a, budget, source_a, violations_a),
+            build_course(title_b, places_b, budget, "b2"),
         ],
     )
 

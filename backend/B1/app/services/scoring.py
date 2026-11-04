@@ -56,6 +56,38 @@ _CATEGORY_RULES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
+MOOD_TAGS = {"조용한 분위기", "활기찬 분위기", "로맨틱", "캐주얼", "고급스러운", "아늑한", "이색적인"}
+
+
+def course_title(categories: list[str], tags_a: list[str], tags_b: list[str],
+                 avoid: str = "", fallback: str = "추천 코스") -> str:
+    """코스에 실제로 반영된 두 사람의 취향 태그로 코스 이름을 짓는다.
+
+    장소 카테고리와 매칭되는 태그를 장소 수만큼 세어 많이 맞은 태그 2개를 쓴다
+    (예: '전시·문화 · 감성 카페 코스'). 맞는 태그가 없으면 fallback,
+    다른 코스 이름(avoid)과 겹치면 다음 순위 태그로 바꾼다.
+    """
+    order = list(dict.fromkeys([*tags_a, *tags_b]))
+    counts: dict[str, int] = {}
+    for c in categories:
+        matched = CATEGORY_TAG_MATCH.get(normalize_category(c), [])
+        for t in order:
+            if t in matched:
+                counts[t] = counts.get(t, 0) + 1
+    # 분위기 태그(조용한/활기찬 등)는 서로 반대일 수 있어 장소·활동 태그를 먼저 쓰고, 분위기는 최대 1개만
+    ranked = sorted(counts, key=lambda t: (t in MOOD_TAGS, -counts[t], order.index(t)))
+    moods = [t for t in ranked if t in MOOD_TAGS]
+    ranked = [t for t in ranked if t not in MOOD_TAGS] + moods[:1]
+    if not ranked:
+        return fallback
+    candidates = [ranked[:2]] + [[ranked[0], t] for t in ranked[2:]] + [[t] for t in ranked]
+    for pick in candidates:
+        title = " · ".join(pick) + " 코스"
+        if title != avoid:
+            return title
+    return f"{fallback} 2"
+
+
 def normalize_category(raw: str | None) -> str:
     text = (raw or "").replace(" ", "")
     for category, keywords in _CATEGORY_RULES:

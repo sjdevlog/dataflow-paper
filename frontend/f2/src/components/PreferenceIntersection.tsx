@@ -2,6 +2,8 @@ interface PreferenceIntersectionProps {
     personA: string[];
     personB: string[];
     common: string[];
+    nameA?: string;
+    nameB?: string;
 }
 
 interface TagProps {
@@ -45,7 +47,7 @@ function LegendDot({ variant, label }: { variant: 'a' | 'b' | 'common'; label: s
     );
 }
 
-export default function PreferenceIntersection({ personA, personB, common }: PreferenceIntersectionProps) {
+export default function PreferenceIntersection({ personA, personB, common, nameA = "A", nameB = "B" }: PreferenceIntersectionProps) {
     return (
         <div style={{
             background: '#FFFFFF',
@@ -59,7 +61,7 @@ export default function PreferenceIntersection({ personA, personB, common }: Pre
         }}>
             <div>
                 <p style={{ fontSize: '11px', color: '#B8A9D9', marginBottom: '6px', fontWeight: 600 }}>
-                    A님 선호
+                    {nameA}님 선호
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {personA.map((keyword) => (
@@ -70,7 +72,7 @@ export default function PreferenceIntersection({ personA, personB, common }: Pre
 
             <div>
                 <p style={{ fontSize: '11px', color: '#E8A0B4', marginBottom: '6px', fontWeight: 600 }}>
-                    B님 선호
+                    {nameB}님 선호
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {personB.map((keyword) => (
@@ -93,8 +95,8 @@ export default function PreferenceIntersection({ personA, personB, common }: Pre
             </div>
 
             <div style={{ display: 'flex', gap: '16px', paddingTop: '4px' }}>
-                <LegendDot variant="a" label="A님" />
-                <LegendDot variant="b" label="B님" />
+                <LegendDot variant="a" label={`${nameA}님`} />
+                <LegendDot variant="b" label={`${nameB}님`} />
                 <LegendDot variant="common" label="공통" />
             </div>
         </div>

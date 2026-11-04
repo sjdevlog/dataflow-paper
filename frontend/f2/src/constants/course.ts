@@ -1,4 +1,4 @@
-import type { CourseKey, PlaceCategory } from "../types/course";
+import type { CourseKey, GeneratedCourse, PlaceCategory } from "../types/course";
 
 export const CAT_EMOJI: Record<PlaceCategory, string> = {
   cafe: "☕",
@@ -16,7 +16,6 @@ export const LOADING_STEPS = [
   "데이트 코스를 구성하는 중...",
 ];
 
-export const COURSE_LABEL: Record<CourseKey, string> = {
-  A: "차분한 감성 코스",
-  B: "액티브 핫플 코스",
-};
+/** 코스 이름 — 백엔드가 두 사람 취향 태그로 지은 이름. 없으면 '추천 코스 1·2' */
+export const courseLabel = (c: Pick<GeneratedCourse, "title"> | undefined, key: CourseKey) =>
+  c?.title?.replace(/\s*\([^)]*\)\s*$/, "").trim() || `추천 코스 ${key === "A" ? 1 : 2}`;

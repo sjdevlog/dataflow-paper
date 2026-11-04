@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { C, FONT, GS } from "../constants/theme";
-import { CAT_EMOJI, COURSE_LABEL } from "../constants/course";
+import { CAT_EMOJI, courseLabel as labelOf } from "../constants/course";
 import { KAKAO_JS_KEY as KAKAO_KEY } from "../config";
 import { usePlan } from "../contexts/PlanContext";
 import { formatDateShort } from "../utils/date";
@@ -65,13 +65,14 @@ export default function CompletePage() {
       region: plan.input.region.name,
       date: plan.input.date,
       course: plan.selectedCourse,
+      title: labelOf(plan.courses[plan.selectedCourse], plan.selectedCourse),
       places: plan.courses[plan.selectedCourse].places,
     });
 
   if (!shared) return <Navigate to="/" replace />;
 
   const { region, places } = shared;
-  const courseLabel = COURSE_LABEL[shared.course];
+  const courseLabel = shared.title || labelOf(undefined, shared.course);
   const dateLabel = formatDateShort(shared.date);
   const link = shareUrl(shared);
 

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, decode_token, hash_password, verify_password
 from app.database import get_db
-from app.models.auth import LocalAuth
+from app.models.auth import CoupleProfile, LocalAuth
 
 router = APIRouter()
 _bearer = HTTPBearer(auto_error=False)
@@ -130,3 +130,37 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=MeResponse)
 def me(current: MeResponse = Depends(get_current_user)):
     return current
+
+
+# ── 두 사람 이름 ('A님·B님' 대신) ────────────────────────────────────
+class ProfileBody(BaseModel):
+    my_name: str = ""
+    partner_name: str = ""
+
+    @field_validator("my_name", "partner_name")
+    @classmethod
+    def clean(cls, v: str) -> str:
+        v = (v or "").strip()
+        if len(v) > 20:
+            raise ValueError("이름은 20자 이하로 입력하세요.")
+        return v
+
+
+@router.get("/profile", response_model=ProfileBody)
+def get_profile(current: MeResponse = Depends(get_current_user), db: Session = Depends(get_db)):
+    """저장된 이름. 아직 없으면 내 이름은 닉네임, 상대 이름은 빈 값"""
+    row = db.get(CoupleProfile, current.user_id)
+    if not row:
+        return ProfileBody(my_name=current.nickname, partner_name="")
+    return ProfileBody(my_name=row.my_name or current.nickname, partner_name=row.partner_name)
+
+
+@router.put("/profile", response_model=ProfileBody)
+def save_profile(body: ProfileBody, current: MeResponse = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.get(CoupleProfile, current.user_id)
+    if not row:
+        row = CoupleProfile(user_id=current.user_id)
+        db.add(row)
+    row.my_name, row.partner_name = body.my_name, body.partner_name
+    db.commit()
+    return body

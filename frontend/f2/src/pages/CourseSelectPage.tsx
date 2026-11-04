@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CourseKey, CoursePlace } from "../types/course";
 import { C, FONT, GS } from "../constants/theme";
-import { CAT_EMOJI, COURSE_LABEL } from "../constants/course";
+import { CAT_EMOJI, courseLabel } from "../constants/course";
 import { useActivePlan } from "../contexts/PlanContext";
 import PageHeader from "../components/common/PageHeader";
 import AiBubble from "../components/common/AiBubble";
@@ -75,7 +75,7 @@ export default function CourseSelectPage() {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <span style={{ fontSize: 18 }}>{icon}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: textColor }}>{COURSE_LABEL[id]}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: textColor }}>{courseLabel(course, id)}</span>
                 {isSelected && (
                   <span style={{ marginLeft: "auto", fontSize: 11, background: accent, color: "#fff", padding: "2px 10px", borderRadius: "999px", fontWeight: 700 }}>
                     선택됨 ✓

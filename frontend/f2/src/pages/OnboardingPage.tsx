@@ -6,6 +6,9 @@ import { fetchWeather, geocodeCity, WEATHER_META } from "../api/weather";
 import type { WeatherSnapshot } from "../api/weather";
 import { savePrefs } from "../api/prefs";
 import { usePlan } from "../contexts/PlanContext";
+import { personNames } from "../utils/names";
+import { useAuth } from "../contexts/AuthContext";
+import { fetchProfile, saveProfile } from "../api/auth";
 import type { RegionValue } from "../contexts/PlanContext";
 import type { GeneratedCourse } from "../types/course";
 import { BUDGET_VALUES, budgetAt, budgetOverlap, fmtBudget } from "../utils/budget";
@@ -31,6 +34,7 @@ const rangeLabel = (r: BudgetRange) => `${fmtBudget(BUDGET_VALUES[r.minIdx])} ~ 
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { startPlan } = usePlan();
+  const { user } = useAuth();
 
   const [region,     setRegion]     = useState<RegionValue | null>(null);
   const [dateStr,    setDateStr]    = useState(todayStr());
@@ -38,6 +42,9 @@ export default function OnboardingPage() {
   const [tagsB,      setTagsB]      = useState<string[]>([]);
   const [budgetA,    setBudgetA]    = useState<BudgetRange>(DEFAULT_BUDGET);
   const [budgetB,    setBudgetB]    = useState<BudgetRange>(DEFAULT_BUDGET);
+  const [nameA,      setNameA]      = useState(user?.nickname ?? "");
+  const [nameB,      setNameB]      = useState("");
+  const names = personNames({ nameA, nameB });
 
   const [step,       setStep]       = useState(0);
   const [loadingMsg, setLoadingMsg] = useState("");
@@ -54,6 +61,22 @@ export default function OnboardingPage() {
   }, []);
 
   const overlap = budgetOverlap(budgetA, budgetB);
+
+  // 계정에 저장된 두 사람 이름 불러오기 (실패하면 닉네임 그대로)
+  useEffect(() => {
+    if (!user?.token) return;
+    let cancelled = false;
+    fetchProfile(user.token)
+      .then(p => { if (!cancelled) { if (p.my_name) setNameA(p.my_name); setNameB(p.partner_name); } })
+      .catch(() => { /* 저장된 이름 없음 */ });
+    return () => { cancelled = true; };
+  }, [user?.token]);
+
+  const startSteps = () => {
+    // 이름은 계정에 저장해 두고 다음에도 쓴다 (실패해도 진행)
+    if (user?.token) saveProfile(user.token, { my_name: nameA.trim(), partner_name: nameB.trim() }).catch(() => {});
+    setStep(1);
+  };
 
   // 지역·날짜가 바뀌면 날씨 미리보기 갱신
   useEffect(() => {
@@ -111,6 +134,7 @@ export default function OnboardingPage() {
     // 코스는 이벤트를 고른 뒤 EventSelectPage 에서 생성 (선택한 이벤트를 중심으로 짜기 위해)
     startPlan(sessionId, {
       region: { name: cityName, lat, lon }, date: dateStr, tagsA, tagsB, budgetA, budgetB, weather,
+      nameA: nameA.trim(), nameB: nameB.trim(),
     }, EMPTY_COURSES);
 
     setLoadingMsg("이벤트를 추천하러 가요 ✦");
@@ -136,7 +160,7 @@ export default function OnboardingPage() {
         {[
           { icon:"📍", text: KAKAO_JS_KEY ? "카카오 API 실시간 지역 검색" : "전국 어디든 지역명 입력" },
           { icon:"🌤", text:"선택 즉시 날씨 자동 확인" },
-          { icon:"💰", text:"A/B 각자 예산 · 직접 입력 가능" },
+          { icon:"💰", text:"두 사람 각자 예산 · 직접 입력 가능" },
           { icon:"✦",  text:"취향 교집합 코스 자동 생성" },
         ].map((x, i) => (
           <div key={i} style={{ display:"flex", alignItems:"center", gap:14, marginBottom:10, animation:`fadeUp 0.5s ease ${0.06+i*0.07}s both` }}>
@@ -152,8 +176,18 @@ export default function OnboardingPage() {
           <div style={{ marginTop:8, marginBottom:16, minHeight:wxLoading ? 48 : 0 }}>
             <WeatherBadge wx={wxPreview} loading={wxLoading && !wxPreview} />
           </div>
+          <label style={{ fontSize:12, color:C.textDim, display:"block", marginBottom:8, fontWeight:500 }}>두 사람 이름 <span style={{ color:C.textMuted, fontWeight:400 }}>(저장돼요 · 비우면 A·B로 표시)</span></label>
+          <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+            {[
+              { v:nameA, set:setNameA, ph:"내 이름", color:C.main },
+              { v:nameB, set:setNameB, ph:"상대 이름", color:C.point },
+            ].map(f => (
+              <input key={f.ph} value={f.v} maxLength={20} placeholder={f.ph} onChange={e => f.set(e.target.value)}
+                style={{ flex:1, minWidth:0, padding:"12px 14px", borderRadius:12, border:`1.5px solid ${C.cardBorder}`, borderLeft:`4px solid ${f.color}`, background:C.card, fontSize:14, color:C.text, fontFamily:FONT, outline:"none" }} />
+            ))}
+          </div>
         </div>
-        <button onClick={() => setStep(1)} disabled={!areaName}
+        <button onClick={startSteps} disabled={!areaName}
           style={{ width:"100%", padding:16, background:areaName?C.main:C.inputBg, color:areaName?"#fff":C.textMuted, border:"none", borderRadius:14, fontSize:16, fontWeight:700, cursor:areaName?"pointer":"not-allowed", fontFamily:FONT, boxShadow:areaName?"0 4px 20px #B8A9D950":"none", transition:"all 0.2s" }}>
           시작하기 →
         </button>
@@ -165,19 +199,19 @@ export default function OnboardingPage() {
     <div style={wrap}><style>{GS_FORM}</style>
       <div className="df-inner" style={{ ...inner, animation:"fadeUp 0.35s ease" }} key={step}>
         {step === 1 && (
-          <PreferenceStep step={1} who="A" tags={tagsA} onToggle={t => setTagsA(toggle(tagsA, t))}
-            onBack={() => setStep(0)} onNext={() => setStep(2)} nextLabel="A님 예산 설정 →" />
+          <PreferenceStep step={1} who="A" name={names.a} tags={tagsA} onToggle={t => setTagsA(toggle(tagsA, t))}
+            onBack={() => setStep(0)} onNext={() => setStep(2)} nextLabel={`${names.a}님 예산 설정 →`} />
         )}
         {step === 2 && (
-          <BudgetStep step={2} who="A" value={budgetA} onChange={setBudgetA}
-            onBack={() => setStep(1)} onNext={() => setStep(3)} nextLabel="B님 취향 입력 →" />
+          <BudgetStep step={2} who="A" name={names.a} value={budgetA} onChange={setBudgetA}
+            onBack={() => setStep(1)} onNext={() => setStep(3)} nextLabel={`${names.b}님 취향 입력 →`} />
         )}
         {step === 3 && (
-          <PreferenceStep step={3} who="B" tags={tagsB} onToggle={t => setTagsB(toggle(tagsB, t))}
-            onBack={() => setStep(2)} onNext={() => setStep(4)} nextLabel="B님 예산 설정 →" />
+          <PreferenceStep step={3} who="B" name={names.b} tags={tagsB} onToggle={t => setTagsB(toggle(tagsB, t))}
+            onBack={() => setStep(2)} onNext={() => setStep(4)} nextLabel={`${names.b}님 예산 설정 →`} />
         )}
         {step === 4 && (
-          <BudgetStep step={4} who="B" value={budgetB} onChange={setBudgetB}
+          <BudgetStep step={4} who="B" name={names.b} value={budgetB} onChange={setBudgetB}
             onBack={() => setStep(3)} onNext={handleGenerate} nextLabel="날씨 확인 후 코스 생성 ✦">
             <div style={{ background:overlap?C.skyDim:C.errorBg, border:`1px solid ${overlap?C.sky:C.error}44`, borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
               {overlap
@@ -190,13 +224,13 @@ export default function OnboardingPage() {
                 { k:"지역",     v: areaName },
                 { k:"날짜",     v: dateStr ? formatDateKo(dateStr) : "미선택" },
                 { k:"날씨",     v: wxPreview ? `${WEATHER_META[wxPreview.type].label} · ${wxPreview.temp ?? "?"}°C` : "생성 시 자동 확인" },
-                { k:"A님 취향", v: tagsA.length ? tagsA.slice(0,3).join(", ") : "미선택" },
-                { k:"A님 예산", v: rangeLabel(budgetA) },
-                { k:"B님 취향", v: tagsB.length ? tagsB.slice(0,3).join(", ") : "미선택" },
-                { k:"B님 예산", v: rangeLabel(budgetB) },
+                { k:`${names.a}님 취향`, v: tagsA.length ? tagsA.slice(0,3).join(", ") : "미선택" },
+                { k:`${names.a}님 예산`, v: rangeLabel(budgetA) },
+                { k:`${names.b}님 취향`, v: tagsB.length ? tagsB.slice(0,3).join(", ") : "미선택" },
+                { k:`${names.b}님 예산`, v: rangeLabel(budgetB) },
               ].map(({ k, v }) => (
                 <div key={k} style={{ display:"flex", gap:10, fontSize:12, marginBottom:5 }}>
-                  <span style={{ color:C.textMuted, width:64, flexShrink:0 }}>{k}</span>
+                  <span style={{ color:C.textMuted, minWidth:64, flexShrink:0 }}>{k}</span>
                   <span style={{ color:k==="날씨"?C.sky:C.text }}>{v}</span>
                 </div>
               ))}

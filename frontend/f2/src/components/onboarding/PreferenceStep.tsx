@@ -3,15 +3,15 @@ import { PREF_TAGS } from "../../utils/tags";
 import { NavButtons, StepHeading, TagButton } from "./controls";
 
 /** Step 1(A님) / Step 3(B님) — 취향 태그 선택 */
-export default function PreferenceStep({ step, who, tags, onToggle, onBack, onNext, nextLabel }: {
-  step: number; who: "A" | "B"; tags: string[]; onToggle: (tag: string) => void;
+export default function PreferenceStep({ step, who, name, tags, onToggle, onBack, onNext, nextLabel }: {
+  step: number; who: "A" | "B"; name: string; tags: string[]; onToggle: (tag: string) => void;
   onBack: () => void; onNext: () => void; nextLabel: string;
 }) {
   const color = who === "A" ? C.main : C.point;
   const dim   = who === "A" ? C.mainDim : C.pointDim;
   return (
     <>
-      <StepHeading step={step} who={who} color={color} title="의 취향을 알려주세요" hint="여러 개 선택 가능해요" />
+      <StepHeading step={step} who={name} color={color} title="의 취향을 알려주세요" hint="여러 개 선택 가능해요" />
       <div style={{ height: 18 }} />
       {Object.entries(PREF_TAGS).map(([cat, list]) => (
         <div key={cat} style={{ marginBottom:22 }}>

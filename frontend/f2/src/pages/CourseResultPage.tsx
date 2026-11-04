@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CourseKey, CoursePlace } from "../types/course";
-import { COURSE_LABEL } from "../constants/course";
+import { courseLabel } from "../constants/course";
 import { useActivePlan } from "../contexts/PlanContext";
+import { personNames } from "../utils/names";
 import PreferenceIntersection from "../components/PreferenceIntersection";
 import CourseTimeline from "../components/CourseTimeline";
 import PlaceDetailCard from "../components/PlaceDetailCard";
@@ -20,6 +21,7 @@ export default function CourseResultPage() {
   const navigate = useNavigate();
   const { plan, selectCourse, removePlace, replacePlace } = useActivePlan();
   const { input } = plan;
+  const nm = personNames(input);
 
   const [selectedPlace, setSelectedPlace] = useState<CoursePlace | null>(null);
   // '다른 장소 추천' 패널
@@ -134,7 +136,7 @@ export default function CourseResultPage() {
                 boxShadow: isActive ? "0 2px 8px rgba(90,68,128,0.25)" : "none",
               }}
             >
-              {tab}안 · {COURSE_LABEL[tab]}
+              {courseLabel(plan.courses[tab], tab)}
             </button>
           );
         })}
@@ -143,8 +145,8 @@ export default function CourseResultPage() {
       {/* 코스 만족도 · 공정성 */}
       {course.avgSatisfactionA != null && course.avgSatisfactionB != null && (
         <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", fontSize: "12px", color: "#7B6FA0", marginBottom: "16px" }}>
-          <span>A님 평균 만족도 <strong style={{ color: "#5a4480" }}>{course.avgSatisfactionA}%</strong></span>
-          <span>B님 평균 만족도 <strong style={{ color: "#c0607a" }}>{course.avgSatisfactionB}%</strong></span>
+          <span>{nm.a}님 평균 만족도 <strong style={{ color: "#5a4480" }}>{course.avgSatisfactionA}%</strong></span>
+          <span>{nm.b}님 평균 만족도 <strong style={{ color: "#c0607a" }}>{course.avgSatisfactionB}%</strong></span>
           {course.fairnessGap != null && <span>만족도 격차 <strong style={{ color: "#3D3257" }}>{course.fairnessGap}%p</strong></span>}
           <span style={{ color: "#B0A8CC" }}>{course.source === "ai" ? "AI 추천" : course.source === "b2" ? "장소 DB 기반" : "샘플"}</span>
         </div>
@@ -190,7 +192,7 @@ export default function CourseResultPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "24px", alignItems: "start" }}>
         {/* 왼쪽 — 취향 교집합 + 지도 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <PreferenceIntersection personA={input.tagsA} personB={input.tagsB} common={commonTags(input.tagsA, input.tagsB)} />
+          <PreferenceIntersection personA={input.tagsA} personB={input.tagsB} common={commonTags(input.tagsA, input.tagsB)} nameA={nm.a} nameB={nm.b} />
           <KakaoMap places={places} selectedPlace={selectedPlace} onSelectPlace={setSelectedPlace} />
         </div>
 
@@ -206,7 +208,7 @@ export default function CourseResultPage() {
               ))}
             </div>
           )}
-          <CourseTimeline places={places} onSelectPlace={setSelectedPlace} costs={places.map((_, i) => (loaded[i] ? costs[i] : undefined))} />
+          <CourseTimeline places={places} onSelectPlace={setSelectedPlace} costs={places.map((_, i) => (loaded[i] ? costs[i] : undefined))} nameA={nm.a} nameB={nm.b} />
         </div>
       </div>
 

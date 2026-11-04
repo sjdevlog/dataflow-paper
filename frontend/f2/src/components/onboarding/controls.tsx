@@ -34,8 +34,8 @@ export function NavButtons({ onBack, onNext, nextLabel, nextDisabled }: { onBack
   );
 }
 
-/** 단계 상단: 진행바 + "Step n / 4 · A님" + 제목 */
-export function StepHeading({ step, who, color, title, hint }: { step: number; who: "A" | "B"; color: string; title: string; hint: string }) {
+/** 단계 상단: 진행바 + "Step n / 4 · 이름님" + 제목 */
+export function StepHeading({ step, who, color, title, hint }: { step: number; who: string; color: string; title: string; hint: string }) {
   return (
     <>
       <ProgressBar step={step} />
