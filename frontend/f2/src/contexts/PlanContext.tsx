@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import type { CourseKey, GeneratedCourse } from "../types/course";
+import type { CourseKey, CoursePlace, GeneratedCourse } from "../types/course";
 import type { WeatherSnapshot } from "../api/weather";
 import type { BudgetRange } from "../utils/budget";
 import type { RecommendedEvent } from "../api/course";
@@ -37,10 +37,20 @@ interface PlanCtx {
   setCourses: (courses: Record<CourseKey, GeneratedCourse>, selectedEvent: RecommendedEvent | null) => void;
   selectCourse: (key: CourseKey) => void;
   removePlace: (key: CourseKey, placeName: string) => void;
+  replacePlace: (key: CourseKey, oldName: string, place: CoursePlace, walkFromPrev?: number | null) => void;
   clearPlan: () => void;
 }
 
 const STORAGE_KEY = "dateflow_plan";
+
+/** 장소가 바뀌면 두 사람 평균 만족도와 격차를 다시 계산 (backend scoring.course_metrics 와 같은 식) */
+function withMetrics(c: GeneratedCourse): GeneratedCourse {
+  if (!c.places.length) return c;
+  const avg = (xs: number[]) => Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10;
+  const a = avg(c.places.map(p => p.satisfactionA));
+  const b = avg(c.places.map(p => p.satisfactionB));
+  return { ...c, avgSatisfactionA: a, avgSatisfactionB: b, fairnessGap: Math.round(Math.abs(a - b) * 10) / 10 };
+}
 
 const Ctx = createContext<PlanCtx | null>(null);
 
@@ -83,6 +93,16 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         [key]: { ...p.courses[key], places: p.courses[key].places.filter(pl => pl.name !== placeName) },
       },
     })),
+    replacePlace: (key, oldName, place, walkFromPrev) => update(p => {
+      const old = p.courses[key].places;
+      const idx = old.findIndex(pl => pl.name === oldName);
+      if (idx < 0) return p;
+      const places = old.map((pl, i) =>
+        i === idx ? place
+        : i === idx - 1 && walkFromPrev != null ? { ...pl, travelTimeToNext: walkFromPrev, carTimeToNext: undefined }
+        : pl);
+      return { ...p, courses: { ...p.courses, [key]: withMetrics({ ...p.courses[key], places }) } };
+    }),
     clearPlan: () => setPlan(null),
   };
 

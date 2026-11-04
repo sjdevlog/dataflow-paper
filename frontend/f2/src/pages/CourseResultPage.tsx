@@ -12,13 +12,44 @@ import { getWeatherEmoji } from "../utils/getWeatherEmoji";
 import { coupleBudget, fmtWon } from "../utils/budget";
 import { dayOfWeekKo, formatDateShort } from "../utils/date";
 import { commonTags } from "../utils/tags";
+import { fetchAlternatives, alternativeToPlace } from "../api/course";
+import type { AlternativePlace } from "../api/course";
 
 export default function CourseResultPage() {
   const navigate = useNavigate();
-  const { plan, selectCourse, removePlace } = useActivePlan();
+  const { plan, selectCourse, removePlace, replacePlace } = useActivePlan();
   const { input } = plan;
 
   const [selectedPlace, setSelectedPlace] = useState<CoursePlace | null>(null);
+  // '다른 장소 추천' 패널
+  const [altFor,  setAltFor]  = useState<CoursePlace | null>(null);
+  const [alts,    setAlts]    = useState<AlternativePlace[]>([]);
+  const [altBusy, setAltBusy] = useState(false);
+  const [altMsg,  setAltMsg]  = useState("");
+
+  const openAlternatives = async (place: CoursePlace) => {
+    const list = plan.courses[plan.selectedCourse].places;
+    const i = list.findIndex(p => p.name === place.name);
+    setAltFor(place); setAlts([]); setAltMsg(""); setAltBusy(true);
+    try {
+      const r = await fetchAlternatives({
+        place, date: input.date, tagsA: input.tagsA, tagsB: input.tagsB,
+        exclude: list.map(p => p.name), prev: list[i - 1], next: list[i + 1],
+      });
+      setAlts(r.alternatives); setAltMsg(r.message);
+    } catch {
+      setAltMsg("다른 장소를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setAltBusy(false);
+    }
+  };
+
+  const applyAlternative = (a: AlternativePlace) => {
+    if (!altFor) return;
+    const next = alternativeToPlace(a, altFor);
+    replacePlace(plan.selectedCourse, altFor.name, next, a.walk_from_prev);
+    setSelectedPlace(next); setAltFor(null);
+  };
   const activeTab = plan.selectedCourse;
   const course = plan.courses[activeTab];
   const places = course.places;
@@ -163,9 +194,38 @@ export default function CourseResultPage() {
               removePlace(activeTab, place.name);
               setSelectedPlace(null);
             }}
-            onRecommendOther={(place) => alert(`${place.name} 대신 다른 장소를 추천받을게요!`)}
+            onRecommendOther={openAlternatives}
             onWishlist={(place) => console.log("찜하기:", place.name)}
           />
+        </div>
+      )}
+
+      {/* 다른 장소 추천 결과 */}
+      {altFor && (
+        <div style={{ marginTop: "16px", background: "#fff", borderRadius: "16px", padding: "18px", border: "1px solid #e8e4f4" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <p style={{ fontSize: "14px", fontWeight: 700, color: "#5a4480", margin: 0 }}>'{altFor.name}' 대신 갈 만한 곳</p>
+            <button onClick={() => setAltFor(null)} style={{ background: "none", border: "none", color: "#b8a9d9", fontSize: "16px", cursor: "pointer" }}>✕</button>
+          </div>
+          {altBusy && <p style={{ fontSize: "13px", color: "#7B6FA0", margin: 0 }}>주변 1 km에서 영업 중인 곳을 찾는 중... (10~30초)</p>}
+          {!altBusy && altMsg && <p style={{ fontSize: "13px", color: "#7B6FA0", margin: 0 }}>{altMsg}</p>}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {alts.map(a => (
+              <button key={a.name} onClick={() => applyAlternative(a)} style={{ textAlign: "left", background: "#F5F3FB", border: "1px solid #e8e4f4", borderRadius: "12px", padding: "12px", cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                  <span style={{ fontSize: "14px", fontWeight: 700, color: "#3D3257" }}>{a.name}</span>
+                  <span style={{ fontSize: "11px", color: a.open_status === "open" ? "#388E3C" : "#999", whiteSpace: "nowrap" }}>
+                    {a.open_status === "open" ? "방문 시각 영업 중" : "영업시간 확인 필요"}
+                  </span>
+                </div>
+                <div style={{ fontSize: "12px", color: "#7B6FA0", marginTop: "4px" }}>
+                  {a.category} · A {a.satisfaction_a}점 · B {a.satisfaction_b}점
+                  {a.walk_from_prev != null && ` · 앞 장소에서 도보 ${a.walk_from_prev}분`}
+                </div>
+                {a.address && <div style={{ fontSize: "11px", color: "#B0A8CC", marginTop: "2px" }}>{a.address}</div>}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

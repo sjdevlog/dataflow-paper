@@ -7,7 +7,7 @@ import type { WeatherSnapshot } from "../api/weather";
 import { savePrefs } from "../api/prefs";
 import { usePlan } from "../contexts/PlanContext";
 import type { RegionValue } from "../contexts/PlanContext";
-import { mockCourses } from "../mocks/courseData";
+import type { GeneratedCourse } from "../types/course";
 import { BUDGET_VALUES, budgetAt, budgetOverlap, fmtBudget } from "../utils/budget";
 import type { BudgetRange } from "../utils/budget";
 import { formatDateKo, todayStr } from "../utils/date";
@@ -20,6 +20,10 @@ import PreferenceStep from "../components/onboarding/PreferenceStep";
 import BudgetStep from "../components/onboarding/BudgetStep";
 
 const DEFAULT_BUDGET: BudgetRange = { minIdx: 2, maxIdx: 5 };
+
+// 코스는 이벤트 선택 뒤 생성 — 그 전까지 비워 둔다 (샘플 데이터를 보여주지 않음)
+const EMPTY_COURSE: GeneratedCourse = { title: "", places: [], source: "ai" };
+const EMPTY_COURSES = { A: EMPTY_COURSE, B: EMPTY_COURSE };
 
 const toggle = (list: string[], tag: string) => list.includes(tag) ? list.filter(t => t !== tag) : [...list, tag];
 const rangeLabel = (r: BudgetRange) => `${fmtBudget(BUDGET_VALUES[r.minIdx])} ~ ${fmtBudget(BUDGET_VALUES[r.maxIdx])}`;
@@ -107,7 +111,7 @@ export default function OnboardingPage() {
     // 코스는 이벤트를 고른 뒤 EventSelectPage 에서 생성 (선택한 이벤트를 중심으로 짜기 위해)
     startPlan(sessionId, {
       region: { name: cityName, lat, lon }, date: dateStr, tagsA, tagsB, budgetA, budgetB, weather,
-    }, mockCourses);
+    }, EMPTY_COURSES);
 
     setLoadingMsg("이벤트를 추천하러 가요 ✦");
     await new Promise(r => setTimeout(r, 700));

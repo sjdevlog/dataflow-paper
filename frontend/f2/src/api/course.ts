@@ -51,6 +51,41 @@ export function fetchEvents(input: {
   }, input.more ? 20000 : 150000);   // AI 추천은 20~60초, 더 보기는 카카오 검색만
 }
 
+export interface AlternativePlace {
+  name: string; category: string; address: string; place_url: string;
+  latitude: number; longitude: number;
+  open_status: "open" | "closed" | "unknown";
+  satisfaction_a: number; satisfaction_b: number; objective: number;
+  walk_from_prev: number | null; walk_to_next: number | null;
+}
+
+/** POST /course/alternatives — 같은 종류의 주변 장소 중 영업 중이고 두 사람 모두 만족할 곳 */
+export function fetchAlternatives(input: {
+  place: CoursePlace; date: string; tagsA: string[]; tagsB: string[]; exclude: string[];
+  prev?: CoursePlace; next?: CoursePlace;
+}): Promise<{ alternatives: AlternativePlace[]; message: string }> {
+  const ll = (p?: CoursePlace) => (p ? { lat: p.lat, lon: p.lon } : null);
+  return postJson("/course/alternatives", {
+    name: input.place.name, category: input.place.desc || input.place.category,
+    lat: input.place.lat, lon: input.place.lon, time: input.place.time, date: input.date,
+    tags_a: input.tagsA, tags_b: input.tagsB, exclude: input.exclude,
+    prev: ll(input.prev), next: ll(input.next),
+  }, 90000);
+}
+
+/** 대안 장소 → 화면용 CoursePlace (시간·예산은 바꾸기 전 장소 것을 이어받음) */
+export function alternativeToPlace(a: AlternativePlace, old: CoursePlace): CoursePlace {
+  return {
+    ...old,
+    name: a.name, desc: a.category, category: mapCategory(a.category),
+    satisfactionA: a.satisfaction_a, satisfactionB: a.satisfaction_b,
+    lat: a.latitude, lon: a.longitude,
+    recommendedMenus: [],
+    travelTimeToNext: a.walk_to_next ?? undefined, travelModeToNext: "walk", carTimeToNext: undefined,
+    openingHours: undefined, closedDays: undefined, breakTime: undefined,
+  };
+}
+
 const FALLBACK_TIMES = ["13:00", "15:30", "18:00", "20:00"];
 
 export function mapCategory(cat: string): CoursePlace["category"] {

@@ -1,8 +1,5 @@
 import type { CoursePlace } from "../types/course";
-import CrowdChart from "./CrowdChart";
 import PlaceActionButtonGroup from "./PlaceActionButtonGroup";
-import { mockCrowdData, mockReviews } from "../mocks/courseData";
-import { formatDaysAgo } from "../utils/formatDaysAgo";
 import { isLikelyClosed } from "../utils/isLikelyClosed";
 
 interface Props {
@@ -156,94 +153,29 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 )}
             </div>
 
-            {/* 액티비티 or 메뉴 */}
-            {place.category === 'activity' ? (
-                <div>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#3d3d3d', marginBottom: '8px' }}>액티비티 목록</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {place.recommendedMenus.map((menu) => (
-                            <div key={menu.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '13px', color: '#3d3d3d' }}>
-                                    {menu.name}
-                                    {menu.isSignature && (
-                                        <span style={{ marginLeft: '6px', fontSize: '10px', background: '#e4eef8', color: '#5a84b0', padding: '2px 6px', borderRadius: '999px' }}>인기</span>
-                                    )}
-                                </span>
-                                <span style={{ fontSize: '13px', color: '#5a5a5a', fontWeight: 500 }}>{menu.price.toLocaleString()}원</span>
-                            </div>
-                        ))}
-                    </div>
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e8e4f4', display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '13px', color: '#999' }}>예상 비용</span>
-                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#5a4480' }}>{place.estimatedCost.toLocaleString()}원</span>
-                    </div>
-                </div>
-            ) : (
-                <div>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#3d3d3d', marginBottom: '8px' }}>메뉴 가격</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {place.recommendedMenus.map((menu) => (
-                            <div key={menu.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '13px', color: '#3d3d3d' }}>
-                                    {menu.name}
-                                    {menu.isSignature && (
-                                        <span style={{ marginLeft: '6px', fontSize: '10px', background: '#faeef2', color: '#c0607a', padding: '2px 6px', borderRadius: '999px' }}>시그니처</span>
-                                    )}
-                                </span>
-                                <span style={{ fontSize: '13px', color: '#5a5a5a', fontWeight: 500 }}>{menu.price.toLocaleString()}원</span>
-                            </div>
-                        ))}
-                    </div>
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e8e4f4', display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '13px', color: '#999' }}>예상 비용</span>
-                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#5a4480' }}>{place.estimatedCost.toLocaleString()}원</span>
-                    </div>
-                </div>
-            )}
-
-            {/* 혼잡도 차트 */}
-            {/* API 코드는 여기에 넣으시오
-                GET /places/{place.kakao_id}/crowd  →  시간대별 혼잡도 배열 수신
-                응답 데이터를 crowdData prop에 전달
-            */}
-            <CrowdChart crowdData={mockCrowdData} highlightLow={false} />
-
-            {/* 최근 방문 후기 */}
-            {/* API 코드는 여기에 넣으시오
-                GET /places/{place.kakao_id}/reviews  →  후기 배열 수신
-                응답 데이터로 mockReviews 교체
-            */}
+            {/* 메뉴·비용 — 메뉴 정보가 있을 때만 목록을 보여주고, 없으면 예산 배분 기준 추정치임을 밝힌다 */}
             <div>
-                <p style={{ fontSize: '13px', fontWeight: 600, color: '#3d3d3d', marginBottom: '10px' }}>
-                    최근 방문 후기
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {mockReviews.map((review, index) => (
-                        <div key={index} style={{ background: '#f5f3fb', borderRadius: '12px', padding: '12px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                <span style={{
-                                    fontSize: '11px',
-                                    background: '#e8e4f4',
-                                    color: '#7b6bad',
-                                    padding: '2px 8px',
-                                    borderRadius: '999px',
-                                    fontWeight: 600,
-                                }}>
-                                    {review.source}
-                                </span>
-                                <span style={{ fontSize: '11px', color: '#bbb' }}>
-                                    {formatDaysAgo(review.daysAgo)}
-                                </span>
-                            </div>
-                            <p style={{ fontSize: '13px', color: '#555', margin: 0, lineHeight: '1.6' }}>
-                                {review.content}
-                            </p>
+                {place.recommendedMenus.length > 0 && (
+                    <>
+                        <p style={{ fontSize: '13px', fontWeight: 600, color: '#3d3d3d', marginBottom: '8px' }}>
+                            {place.category === 'activity' ? '액티비티 목록' : '메뉴 가격'}
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                            {place.recommendedMenus.map((menu) => (
+                                <div key={menu.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', color: '#3d3d3d' }}>{menu.name}</span>
+                                    <span style={{ fontSize: '13px', color: '#5a5a5a', fontWeight: 500 }}>{menu.price.toLocaleString()}원</span>
+                                </div>
+                            ))}
                         </div>
-                    ))}
+                    </>
+                )}
+                <div style={{ paddingTop: '10px', borderTop: '1px solid #e8e4f4', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: '13px', color: '#999' }}>
+                        예상 비용{place.recommendedMenus.length === 0 && <span style={{ fontSize: '11px', color: '#bbb' }}> (두 분 예산을 장소 수로 나눈 추정치)</span>}
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#5a4480' }}>{place.estimatedCost.toLocaleString()}원</span>
                 </div>
-                <p style={{ fontSize: '11px', color: '#bbb', marginTop: '8px', textAlign: 'center' }}>
-                    네이버 블로그 · 인스타그램 · 포잇 실시간 수집 · 방문 기준 업데이트
-                </p>
             </div>
 
             {/* 폐점 경고 */}

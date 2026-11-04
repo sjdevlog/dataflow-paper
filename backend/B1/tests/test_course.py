@@ -217,3 +217,35 @@ def test_no_event_uses_walk_as_main(client, monkeypatch):
     monkeypatch.setattr(course.ai_bridge, "generate_course", fake_gen)
     client.post("/course/generate", json={**REQUEST, "no_event": True})
     assert called["selected_event"]["category"] == "산책"
+
+
+# ── 다른 장소 추천 (/course/alternatives) ──────────────────────────
+import app.services.alternatives as alt_svc
+
+
+def test_alternatives_skip_closed_and_rank_by_fairness(client, monkeypatch):
+    docs = [_doc("코스에 있는 카페", "음식점 > 카페"), _doc("닫은 카페", "음식점 > 카페"),
+            _doc("와인바 겸 카페", "음식점 > 술집 > 와인바"), _doc("조용한 카페", "음식점 > 카페")]
+
+    class FakeRes:
+        def json(self):
+            return {"documents": docs}
+
+    class FakeClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, *a, **k): return FakeRes()
+
+    monkeypatch.setattr(alt_svc, "KAKAO_REST_API_KEY", "test")
+    monkeypatch.setattr(alt_svc.httpx, "AsyncClient", lambda **k: FakeClient())
+    monkeypatch.setattr(alt_svc, "_open_status", lambda name, d, t: "closed" if name == "닫은 카페" else "open")
+
+    req = {"name": "원래 카페", "category": "카페", "lat": 37.54, "lon": 127.05, "time": "15:00", "date": "2026-11-07",
+           "tags_a": ["감성 카페", "조용한 분위기"], "tags_b": ["활기찬 분위기", "핫플 방문"],
+           "exclude": ["코스에 있는 카페"], "prev": {"lat": 37.541, "lon": 127.05}}
+    data = client.post("/course/alternatives", json=req).json()
+    names = [a["name"] for a in data["alternatives"]]
+    assert "닫은 카페" not in names and "코스에 있는 카페" not in names
+    # 바(B 취향 2개 일치 vs A 0개) 와 카페(A 2개 vs B 0개)는 격차가 같으면 평균으로 비교 → 둘 다 후보
+    assert set(names) == {"와인바 겸 카페", "조용한 카페"}
+    assert data["alternatives"][0]["walk_from_prev"] is not None

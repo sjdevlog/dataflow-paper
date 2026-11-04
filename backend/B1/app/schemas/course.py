@@ -83,3 +83,40 @@ class EventResponse(BaseModel):
     events:  List[EventItem]
     source:  Literal["ai", "kakao", "ai+kakao", "none"]
     message: str = ""
+
+
+# '다른 장소 추천' 요청 / 응답
+class LatLon(BaseModel):
+    lat: float
+    lon: float
+
+class AlternativeRequest(BaseModel):
+    name:     str
+    category: str
+    lat:      float
+    lon:      float
+    time:     str = ""
+    date:     Optional[str] = None
+    tags_a:   List[str] = []
+    tags_b:   List[str] = []
+    exclude:  List[str] = []          # 코스에 이미 있는 장소 이름
+    prev:     Optional[LatLon] = None # 앞 장소 좌표 (이동시간 재계산용)
+    next:     Optional[LatLon] = None # 뒤 장소 좌표
+
+class AlternativeItem(BaseModel):
+    name:           str
+    category:       str
+    address:        str = ""
+    place_url:      str = ""
+    latitude:       float
+    longitude:      float
+    open_status:    Literal["open", "closed", "unknown"] = "unknown"
+    satisfaction_a: int
+    satisfaction_b: int
+    objective:      float
+    walk_from_prev: Optional[int] = None
+    walk_to_next:   Optional[int] = None
+
+class AlternativeResponse(BaseModel):
+    alternatives: List[AlternativeItem]
+    message:      str = ""

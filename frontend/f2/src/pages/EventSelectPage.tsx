@@ -26,6 +26,7 @@ export default function EventSelectPage() {
   const [noMore,   setNoMore]   = useState(false);
   const [selected, setSelected] = useState<string | null>(plan.selectedEvent?.name ?? null);
   const [genMsg,   setGenMsg]   = useState("");
+  const [genError, setGenError] = useState(false);
   const started = useRef(false);
 
   const base = { region: region.name, lat: region.lat, lon: region.lon, date, tagsA, tagsB };
@@ -74,10 +75,11 @@ export default function EventSelectPage() {
         tagsA, tagsB, selectedEvent: ev, noEvent: !ev,
       });
       setCourses(courses, ev);
+      navigate("/courses");
     } catch (e) {
-      console.warn("코스 생성 실패 → 샘플 데이터 사용", e);
+      console.warn("코스 생성 실패", e);
+      setGenMsg(""); setGenError(true);
     }
-    navigate("/courses");
   };
 
   if (genMsg) return <LoadingScreen message={genMsg} />;
@@ -152,7 +154,12 @@ export default function EventSelectPage() {
             <p style={{ textAlign: "center", fontSize: 12, color: C.textDim, marginBottom: 22 }}>주변에서 더 찾을 수 있는 장소가 없어요.</p>
           )}
 
-          <button onClick={handleNext} style={{ width: "100%", padding: 16, background: C.mainDark, color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(90,68,128,0.3)", fontFamily: FONT }}>
+          {genError && (
+            <p style={{ textAlign: "center", fontSize: 13, color: C.error, marginBottom: 12 }}>
+              코스를 만들지 못했어요. 잠시 후 다시 눌러 주세요.
+            </p>
+          )}
+          <button onClick={() => { setGenError(false); handleNext(); }} style={{ width: "100%", padding: 16, background: C.mainDark, color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(90,68,128,0.3)", fontFamily: FONT }}>
             {nextLabel}
           </button>
         </>

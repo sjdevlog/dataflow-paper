@@ -5,12 +5,12 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from app.database import get_db
 from app.models.user import UserPreference
-from app.schemas.course import CourseRequest, CourseResponse, CourseItem, PlaceItem, EventRequest, EventResponse
+from app.schemas.course import CourseRequest, CourseResponse, CourseItem, PlaceItem, EventRequest, EventResponse, AlternativeRequest, AlternativeResponse
 from app.services.weather import get_weather
 from app.services.kakao import geocode, transport_minutes
 from app.services.places import fetch_places
 from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course
-from app.services import ai_bridge, events as event_service
+from app.services import ai_bridge, events as event_service, alternatives as alt_service
 
 router = APIRouter()
 
@@ -162,6 +162,17 @@ async def recommend_events(req: EventRequest):
                                                   req.tags_a, req.tags_b, req.natural_input)
     msg = "" if found else f"{req.region} 근처에서 전시·공연·체험 장소를 찾지 못했어요. 카페·식당 중심으로 코스를 짤게요."
     return EventResponse(events=found, source=source, message=msg)
+
+
+@router.post("/alternatives", response_model=AlternativeResponse)
+async def recommend_alternatives(req: AlternativeRequest):
+    """'다른 장소 추천' — 같은 종류의 주변 장소 중 영업 중이고 두 사람 모두 만족할 곳 최대 3개"""
+    alts = await alt_service.find_alternatives(
+        req.name, req.category, req.lat, req.lon, req.time, req.date, req.tags_a, req.tags_b, req.exclude,
+        prev=(req.prev.lat, req.prev.lon) if req.prev else None,
+        nxt=(req.next.lat, req.next.lon) if req.next else None,
+    )
+    return AlternativeResponse(alternatives=alts, message="" if alts else "주변 1 km 안에서 바꿀 만한 곳을 찾지 못했어요.")
 
 
 @router.post("/generate", response_model=CourseResponse)

@@ -21,7 +21,14 @@ function RequirePlan({ children }: { children: ReactNode }) {
   return plan ? <>{children}</> : <Navigate to="/" replace />;
 }
 
+/** 이벤트 선택 후 실제 코스를 받은 뒤에만 (샘플 코스로 보여주지 않음) */
+function RequireCourses({ children }: { children: ReactNode }) {
+  const { plan } = usePlan();
+  return plan?.coursesReady ? <>{children}</> : <Navigate to={plan ? "/events" : "/"} replace />;
+}
+
 const planPage = (page: ReactNode) => <ProtectedRoute><RequirePlan>{page}</RequirePlan></ProtectedRoute>;
+const coursePage = (page: ReactNode) => <ProtectedRoute><RequireCourses>{page}</RequireCourses></ProtectedRoute>;
 
 function App() {
   return (
@@ -32,9 +39,9 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
             <Route path="/events" element={planPage(<EventSelectPage />)} />
-            <Route path="/courses" element={planPage(<CourseSelectPage />)} />
-            <Route path="/result" element={planPage(<CourseResultPage />)} />
-            <Route path="/booking" element={planPage(<BookingPage />)} />
+            <Route path="/courses" element={coursePage(<CourseSelectPage />)} />
+            <Route path="/result" element={coursePage(<CourseResultPage />)} />
+            <Route path="/booking" element={coursePage(<BookingPage />)} />
             {/* 공유 링크(?share=)로도 열리므로 RequirePlan 대신 페이지 안에서 처리 */}
             <Route path="/complete" element={<ProtectedRoute><CompletePage /></ProtectedRoute>} />
           </Routes>
