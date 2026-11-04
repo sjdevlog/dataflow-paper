@@ -17,16 +17,29 @@ def _headers() -> dict:
     return {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
 
 
-async def geocode(query: str) -> tuple[float | None, float | None]:
-    """카카오 키워드 검색으로 (위도, 경도) 조회. 실패 시 (None, None)"""
+GEOCODE_RADIUS_M = 3000
+
+
+async def geocode(query: str, near: tuple[float, float] | None = None) -> tuple[float | None, float | None]:
+    """카카오 키워드 검색으로 (위도, 경도) 조회. 실패 시 (None, None)
+
+    near=(위도, 경도)를 주면 그 반경 3 km 안에서 먼저 찾는다. '서울숲카페거리 차만다 성수'처럼
+    지역명을 붙이면 검색이 안 되는 경우가 있어, 장소명만으로 주변을 검색하는 편이 정확하다.
+    """
     if not KAKAO_REST_API_KEY or not query.strip():
         return None, None
+    attempts = []
+    if near and near[0] and near[1]:
+        attempts.append({"query": query, "size": 1, "y": near[0], "x": near[1],
+                         "radius": GEOCODE_RADIUS_M, "sort": "accuracy"})
+    attempts.append({"query": query, "size": 1})
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(LOCAL_SEARCH_URL, headers=_headers(), params={"query": query, "size": 1})
-            docs = res.json().get("documents", [])
-            if docs:
-                return float(docs[0]["y"]), float(docs[0]["x"])
+            for params in attempts:
+                res = await client.get(LOCAL_SEARCH_URL, headers=_headers(), params=params)
+                docs = res.json().get("documents", [])
+                if docs:
+                    return float(docs[0]["y"]), float(docs[0]["x"])
     except Exception as e:
         print(f">>> 좌표 조회 실패: {query} ({e})")
     return None, None

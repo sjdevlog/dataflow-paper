@@ -29,7 +29,7 @@ def client(monkeypatch):
     async def places(category, area, size=5, lat=None, lon=None):
         return [{"name": f"{area} {category}{i}", "latitude": 37.5 + i * 0.001, "longitude": 127.0} for i in range(2)]
 
-    async def geocode(q):
+    async def geocode(q, near=None):
         return 37.5, 127.0
 
     async def transport(*a):
@@ -78,9 +78,11 @@ def test_ai_picks_fair_course_and_skips_closed(client, monkeypatch):
     monkeypatch.setattr(course.ai_bridge, "recommend_events", lambda **k: (_ for _ in ()).throw(AssertionError("이벤트를 받았으면 Pipeline 1 호출 안 함")))
     monkeypatch.setattr(course.ai_bridge, "generate_course", fake_gen)
 
-    a = client.post("/course/generate", json=req).json()["courses"][0]
+    a, b = client.post("/course/generate", json=req).json()["courses"]
     assert [p["name"] for p in a["places"]] == ["카페4", "바2"]
     assert called["selected_event"]["name"] == "전시X" and called["verify"] is True
+    # 고른 이벤트는 B안에도 두 번째 장소로 들어간다
+    assert b["places"][1]["name"] == "전시X" and b["places"][1]["category"] == "전시"
 
 
 def test_ai_failure_falls_back_to_b2(client, monkeypatch):
@@ -339,3 +341,29 @@ def test_crowd_matches_nearby_place(client, monkeypatch):
 def test_crowd_without_key(client, monkeypatch):
     monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
     assert client.post("/course/crowd", json={"name": "x", "lat": 1, "lon": 1}).json()["reason"] == "no_key"
+
+
+# ── 좌표 조회: 지역 반경 우선 ─────────────────────────────────────────────
+def test_geocode_searches_near_region_first(monkeypatch):
+    import asyncio
+    from app.services import kakao
+
+    calls = []
+
+    class Resp:
+        def __init__(self, docs): self._docs = docs
+        def json(self): return {"documents": self._docs}
+
+    class Client:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, headers=None, params=None):
+            calls.append(params)
+            return Resp([{"y": "37.54", "x": "127.04"}] if "x" in params else [])
+
+    monkeypatch.setattr(kakao, "KAKAO_REST_API_KEY", "test")
+    monkeypatch.setattr(kakao.httpx, "AsyncClient", Client)
+    lat, lon = asyncio.run(kakao.geocode("차만다 성수", near=(37.5444, 127.0374)))
+    assert (lat, lon) == (37.54, 127.04)
+    assert calls[0]["radius"] == kakao.GEOCODE_RADIUS_M and calls[0]["query"] == "차만다 성수"

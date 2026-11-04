@@ -52,13 +52,14 @@ def pick(candidates: list[dict], idx: int) -> dict | None:
 
 
 async def make_place(data: dict | None, category: str, time: str, price: int,
-                     region: str, tags_a: list[str], tags_b: list[str]) -> PlaceItem:
+                     region: str, tags_a: list[str], tags_b: list[str],
+                     near: tuple[float, float] | None = None) -> PlaceItem:
     fallback_names = {"카페": "카페", "식당": "레스토랑", "바": "바"}
     name = data["name"] if data else f"{region} {fallback_names.get(category, category)}"
     lat = float(data["latitude"]) if data and data.get("latitude") else None
     lon = float(data["longitude"]) if data and data.get("longitude") else None
     if not lat or not lon:
-        lat, lon = await geocode(f"{region} {name}")
+        lat, lon = await geocode(name, near=near) if near else await geocode(f"{region} {name}")
 
     return PlaceItem(
         name=name,
@@ -132,7 +133,7 @@ async def ai_course_places(req: CourseRequest, mood: str, weather: dict, budget:
     places = []
     for p in raw:
         category = normalize_category(p.get("category"))
-        lat, lon = await geocode(f"{req.region} {p.get('name', '')}")
+        lat, lon = await geocode(p.get("name", ""), near=(req.lat, req.lon))
         status = p.get("open_status")
         places.append(PlaceItem(
             name=p.get("name", ""),
@@ -213,7 +214,8 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
 
     async def b2_places(plan) -> list[PlaceItem]:
         return [
-            await make_place(pick(candidates[cat], idx), cat, time, int(budget * ratio), req.region, tags_a, tags_b)
+            await make_place(pick(candidates[cat], idx), cat, time, int(budget * ratio), req.region, tags_a, tags_b,
+                             near=(req.lat, req.lon))
             for cat, idx, time, ratio in plan
         ]
 
@@ -226,6 +228,15 @@ async def generate_course(req: CourseRequest, db: Session = Depends(get_db)):
 
     # B안: B2 장소로 순서·후보를 바꿔 구성
     places_b = await b2_places(COURSE_B_PLAN)
+    if req.selected_event and req.selected_event.get("name"):
+        # 사용자가 고른 메인 이벤트는 B안에도 넣는다 (첫 장소 다음, 15:00)
+        ev = req.selected_event
+        ev_lat, ev_lon = ev.get("latitude"), ev.get("longitude")
+        near = (float(ev_lat), float(ev_lon)) if ev_lat and ev_lon else (req.lat, req.lon)
+        ev_place = await make_place(
+            {"name": ev["name"], "latitude": ev_lat, "longitude": ev_lon},
+            normalize_category(ev.get("category")), "15:00", 0, req.region, tags_a, tags_b, near=near)
+        places_b.insert(1, ev_place)
     await fill_transport(places_b)
 
     return CourseResponse(
