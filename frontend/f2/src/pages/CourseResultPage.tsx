@@ -72,11 +72,13 @@ export default function CourseResultPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missing]);
 
-  const costs = places.map(p => placeCost(p, google[placeKey(p)]));
-  const totalCost = costs.reduce((s, c) => s + c.mid, 0);
-  const totalRange = { min: costs.reduce((s, c) => s + c.min, 0), max: costs.reduce((s, c) => s + c.max, 0), mid: totalCost, source: "google" as const };
-  const nGoogle = costs.filter(c => c.source === "google").length;
-  const isOverBudget = totalCost > budget;
+  const loaded = places.map(p => placeKey(p) in google);
+  const costs = places.map(p => placeCost(google[placeKey(p)]));
+  const known = costs.filter((c): c is Extract<typeof c, { known: true }> => c.known);
+  const nUnknown = costs.length - known.length;
+  const totalCost = known.reduce((s, c) => s + c.mid, 0);
+  const totalRange = { known: true as const, min: known.reduce((s, c) => s + c.min, 0), max: known.reduce((s, c) => s + c.max, 0), mid: totalCost };
+  const isOverBudget = known.length > 0 && totalCost > budget;
 
   // 선택한 날짜 기준 휴무 장소 체크
   const closedWarnings = places.filter((p) => {
@@ -154,7 +156,7 @@ export default function CourseResultPage() {
           <span style={{ fontSize: "13px", color: "#888" }}>예상 총 비용</span>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontSize: "14px", fontWeight: 700, color: isOverBudget ? "#e05555" : "#5a4480" }}>
-              {fmtRange(totalRange)}
+              {known.length ? fmtRange(totalRange) : "정보 없음"}
             </span>
             <span style={{ fontSize: "11px", color: "#bbb", marginLeft: "6px" }}>
               A+B 합산 {fmtWon(budgetRange.min)} ~ {fmtWon(budgetRange.max)}
@@ -173,12 +175,14 @@ export default function CourseResultPage() {
           />
         </div>
         <div style={{ marginTop: "6px", fontSize: "12px", color: isOverBudget ? "#e05555" : "#b8a9d9", textAlign: "right" }}>
-          {isOverBudget
+          {!known.length ? "" : isOverBudget
             ? `⚠️ 중간값 기준 ${(totalCost - budget).toLocaleString()}원 초과`
             : `중간값 기준 ${(budget - totalCost).toLocaleString()}원 남음`}
         </div>
         <div style={{ marginTop: "2px", fontSize: "11px", color: "#bbb", textAlign: "right" }}>
-          {places.length}곳 중 {nGoogle}곳은 Google Maps 1인 가격대 × 2명, 나머지는 예산 배분 추정
+          {loaded.every(Boolean)
+            ? `Google Maps 1인 가격대 × 2명 기준${nUnknown ? ` · 가격 정보 없는 ${nUnknown}곳 제외` : ""}`
+            : "가격 정보를 불러오는 중..."}
         </div>
       </div>
 
@@ -202,7 +206,7 @@ export default function CourseResultPage() {
               ))}
             </div>
           )}
-          <CourseTimeline places={places} onSelectPlace={setSelectedPlace} costs={costs} />
+          <CourseTimeline places={places} onSelectPlace={setSelectedPlace} costs={places.map((_, i) => (loaded[i] ? costs[i] : undefined))} />
         </div>
       </div>
 
@@ -218,6 +222,7 @@ export default function CourseResultPage() {
             }}
             onRecommendOther={openAlternatives}
             google={placeKey(selectedPlace) in google ? google[placeKey(selectedPlace)] : undefined}
+            visitDate={input.date}
             onWishlist={(place) => console.log("찜하기:", place.name)}
           />
         </div>

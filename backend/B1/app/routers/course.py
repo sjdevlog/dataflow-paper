@@ -10,7 +10,7 @@ from app.services.weather import get_weather
 from app.services.kakao import geocode, transport_minutes
 from app.services.places import fetch_places
 from app.services.scoring import satisfaction, course_metrics, normalize_category, select_fair_course
-from app.services import ai_bridge, events as event_service, alternatives as alt_service, google_places
+from app.services import ai_bridge, events as event_service, alternatives as alt_service, google_places, crowd
 
 router = APIRouter()
 
@@ -183,6 +183,16 @@ async def place_details(req: dict):
     except (KeyError, TypeError, ValueError):
         raise HTTPException(status_code=400, detail="name, lat, lon 이 필요해요.")
     return await google_places.details(name, lat, lon)
+
+
+@router.post("/crowd")
+async def place_crowd(req: dict):
+    """시간대별 혼잡도 (구글맵 인기 시간대, SerpApi 경유) — 상세 카드를 열 때만 호출"""
+    try:
+        name, lat, lon = str(req["name"]), float(req["lat"]), float(req["lon"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="name, lat, lon 이 필요해요.")
+    return await crowd.popular_times(name, lat, lon)
 
 
 @router.post("/generate", response_model=CourseResponse)

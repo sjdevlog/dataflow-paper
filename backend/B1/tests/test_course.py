@@ -297,3 +297,45 @@ def test_place_details_without_key(client, monkeypatch):
     monkeypatch.delenv("GOOGLE_PLACES_API_KEY", raising=False)
     d = client.post("/course/place-details", json={"name": "x", "lat": 37.5, "lon": 127.0}).json()
     assert d == {"found": False, "reason": "no_key"}
+
+
+# ── 시간대별 혼잡도 (/course/crowd) ───────────────────────────────
+import app.services.crowd as crowd_svc
+
+
+def test_parse_hour_formats():
+    assert crowd_svc.parse_hour("8 PM") == 20 and crowd_svc.parse_hour("8 PM") == 20
+    assert crowd_svc.parse_hour("오후 8시") == 20 and crowd_svc.parse_hour("오전 12시") == 0
+    assert crowd_svc.parse_hour("12 PM") == 12 and crowd_svc.parse_hour("abc") is None
+
+
+def test_crowd_matches_nearby_place(client, monkeypatch):
+    pt = {"graph_results": {"saturday": [{"time": "오후 7시", "busyness_score": 60, "info": "보통 조금 붐빔"},
+                                         {"time": "오후 6시", "busyness_score": 40}]}}
+    calls = []
+
+    class FakeRes:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+
+    class FakeClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params):
+            calls.append(params)
+            if "place_id" in params:
+                return FakeRes({"place_results": {"popular_times": pt, "gps_coordinates": {"latitude": 37.5, "longitude": 127.0}}})
+            return FakeRes({"local_results": [
+                {"place_id": "far", "gps_coordinates": {"latitude": 37.6, "longitude": 127.0}},
+                {"place_id": "near", "gps_coordinates": {"latitude": 37.5003, "longitude": 127.0}}]})
+
+    monkeypatch.setenv("SERPAPI_API_KEY", "test")
+    monkeypatch.setattr(crowd_svc.httpx, "AsyncClient", lambda **k: FakeClient())
+    d = client.post("/course/crowd", json={"name": "카페", "lat": 37.5, "lon": 127.0}).json()
+    assert d["found"] and [r["hour"] for r in d["days"]["saturday"]] == [18, 19]
+    assert calls[-1]["place_id"] == "near"
+
+
+def test_crowd_without_key(client, monkeypatch):
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    assert client.post("/course/crowd", json={"name": "x", "lat": 1, "lon": 1}).json()["reason"] == "no_key"

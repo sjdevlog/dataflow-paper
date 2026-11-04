@@ -5,7 +5,7 @@ import type { PlaceCost } from "../utils/cost";
 interface Props {
     places: CoursePlace[];
     onSelectPlace: (place: CoursePlace) => void;
-    costs?: PlaceCost[];
+    costs?: (PlaceCost | undefined)[];
 }
 
 export default function CourseTimeline({ places, onSelectPlace, costs }: Props) {

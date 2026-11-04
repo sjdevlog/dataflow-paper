@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { CoursePlace } from "../types/course";
 import { fetchPlaceDetails } from "../api/course";
 import type { GooglePlaceDetails } from "../api/course";
+import CrowdBars from "./CrowdBars";
+import { placeCost, fmtRange } from "../utils/cost";
 import { GooglePhotos, GoogleReviews, GoogleSummary } from "./GooglePlaceInfo";
 import PlaceActionButtonGroup from "./PlaceActionButtonGroup";
 import { isLikelyClosed } from "../utils/isLikelyClosed";
@@ -13,9 +15,10 @@ interface Props {
     onRecommendOther: (place: CoursePlace) => void; // 다른 장소 추천
     onWishlist: (place: CoursePlace) => void;    // 찜하기
     google?: GooglePlaceDetails | null;          // 결과 화면에서 이미 받아온 구글 상세 (없으면 카드가 직접 조회)
+    visitDate?: string;                          // YYYY-MM-DD — 혼잡도에서 방문 요일·시각 표시용
 }
 
-export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOther, onWishlist, google }: Props) {
+export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOther, onWishlist, google, visitDate }: Props) {
     // 구글 상세 — 정책상 저장하지 않고 카드를 열 때마다 조회 (결과는 어느 장소 것인지 key로 구분)
     const key = `${place.name}|${place.lat}|${place.lon}`;
     const [res, setRes] = useState<{ key: string; g: GooglePlaceDetails | null } | null>(null);
@@ -30,8 +33,8 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
     const gLoading = google === undefined && res?.key !== key;
     const g = google !== undefined ? google : gLoading ? null : res?.g ?? null;
 
-    // 2인 예상 비용: 구글 1인 가격대가 있으면 그 중간값 × 2, 없으면 예산 배분 추정치
-    const gMid = g?.price_min != null ? Math.round(((g.price_min + (g.price_max ?? g.price_min)) / 2) * 2 / 1000) * 1000 : null;
+    // 2인 예상 비용: 구글 1인 가격대 × 2명, 등록 안 된 곳은 '정보 없음'
+    const cost = placeCost(g);
 
     return (
         <div style={{
@@ -199,17 +202,15 @@ export default function PlaceDetailCard({ place, onClose, onSkip, onRecommendOth
                 <div style={{ paddingTop: '10px', borderTop: '1px solid #e8e4f4', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <span style={{ fontSize: '13px', color: '#999' }}>
                         예상 비용 (2인)
-                        <span style={{ fontSize: '11px', color: '#bbb' }}>
-                            {gMid != null ? " · Google Maps 1인 가격대 기준" : place.recommendedMenus.length === 0 ? " · 두 분 예산을 장소 수로 나눈 추정치" : ""}
-                        </span>
+                        {cost.known && <span style={{ fontSize: '11px', color: '#bbb' }}> · Google Maps 1인 가격대 기준</span>}
                     </span>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#5a4480' }}>
-                        {gMid != null && g?.price_min != null
-                            ? `${(g.price_min * 2).toLocaleString()}~${((g.price_max ?? g.price_min) * 2).toLocaleString()}원`
-                            : `${place.estimatedCost.toLocaleString()}원`}
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: cost.known ? '#5a4480' : '#bbb' }}>
+                        {gLoading ? "불러오는 중" : fmtRange(cost)}
                     </span>
                 </div>
             </div>
+
+            <CrowdBars place={place} visitDate={visitDate} />
 
             {g && <GoogleReviews g={g} />}
 

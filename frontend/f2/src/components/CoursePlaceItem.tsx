@@ -61,10 +61,8 @@ export default function CoursePlaceItem({ place, onClick, cost }: Props) {
             </div>
 
             <div style={{ margin: '6px 0 0 52px', fontSize: '12px', color: '#888' }}>
-                예상 비용 (2인) {cost ? fmtRange(cost) : `${place.estimatedCost.toLocaleString()}원`}
-                <span style={{ marginLeft: '8px', color: '#aaa' }}>
-                    {cost?.source === "google" ? "· Google Maps 가격대 기준" : "· 예산 배분 추정"}
-                </span>
+                예상 비용 (2인) {cost ? fmtRange(cost) : "불러오는 중"}
+                {cost?.known && <span style={{ marginLeft: '8px', color: '#aaa' }}>· Google Maps 가격대 기준</span>}
             </div>
         </div>
     );

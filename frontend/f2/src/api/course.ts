@@ -103,6 +103,16 @@ export interface GooglePlaceDetails {
   photos?: { url: string; author: string; author_uri: string }[];
 }
 
+/** 시간대별 혼잡도 (구글맵 인기 시간대, SerpApi 경유) */
+export interface CrowdResult {
+  found: boolean; reason?: string;
+  days?: Record<string, { hour: number; score: number; info: string }[]>;
+  live_info?: string;
+}
+export function fetchCrowd(place: { name: string; lat: number; lon: number }): Promise<CrowdResult> {
+  return postJson<CrowdResult>("/course/crowd", place, 30000);
+}
+
 export function fetchPlaceDetails(place: { name: string; lat: number; lon: number }): Promise<GooglePlaceDetails> {
   return postJson<GooglePlaceDetails>("/course/place-details", place, 20000);
 }
