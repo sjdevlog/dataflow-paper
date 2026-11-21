@@ -2,7 +2,7 @@
 
 실행 (repo 루트에서):
     python experiments/run.py --reps 1 --limit 5      # 시험 실행 (시나리오 5개)
-    python experiments/run.py --reps 2                # 전체 실행
+    python experiments/run.py --reps 3                # 전체 실행 (60개 시나리오 × 3회)
     python experiments/run.py --regions 성수,홍대,강남  # 무료 한도용 축소 실행 (36개 시나리오)
     python experiments/run.py --mock --limit 4        # API 키 없이 하네스만 점검
     python experiments/summarize.py                   # 표 8·9 집계
@@ -12,12 +12,15 @@ API 키는 ai/.env 에서 읽는다 (GOOGLE_API_KEY = Gemini, KAKAO_KEY).
 
 결과:
     experiments/results/runs.csv     시나리오·반복·시스템별 1행
-    experiments/results/lambda.csv   LVF 후보 집합에서 λ별 선택 결과 (표 9)
+    experiments/results/lambda.csv   LVF 후보 집합에서 λ별 선택 결과 (표 10)
+    experiments/results/places.csv   평가한 장소 1곳당 1행 (판정, 방문 시각, 카카오맵 링크) — 사람 확인용
 이미 기록된 (scenario_id, rep) 는 건너뛰므로 중단 후 다시 실행해도 이어서 진행된다.
 
 시스템 정의 (논문 표 5):
     R    카테고리별 카카오 검색 1순위를 고정 시간대에 배치 (영업시간 검증 X, 공정성 X)
     L    Pipeline 2, check_hours 미사용, 코스 1개
+    L3   Pipeline 2, check_hours 미사용, 코스 후보 3개 → λ = 0 으로 선택
+         (LV와 후보 수를 맞춘 baseline: L3 vs LV 차이 = 검증 효과, L vs L3 차이 = 후보 3개 중 선택 효과)
     LV   Pipeline 2, 더블체크 사용, 코스 후보 3개 → λ = 0 으로 선택
     LVF  LV와 같은 후보 집합 → λ = FAIR_LAMBDA 로 선택 (제안 방법)
 LV와 LVF는 같은 후보에서 선택만 달리하므로, 차이는 공정성 선택의 효과만 반영한다.
@@ -116,6 +119,9 @@ class Real:
     def judge(self, name, when):
         return self.hj.judge(name, when)["status"]
 
+    def judge_full(self, name, when):
+        return self.hj.judge(name, when)
+
     def clear_cache(self):
         self.hj.clear_cache()
 
@@ -155,6 +161,9 @@ class Mock(Real):
     def judge(self, name, when):
         return self.rng.choices(["open", "closed", "unknown"], [0.8, 0.1, 0.1])[0]
 
+    def judge_full(self, name, when):
+        return {"status": self.judge(name, when), "place_url": ""}
+
     def clear_cache(self):
         pass
 
@@ -170,10 +179,13 @@ def haversine_m(a, b):
 def evaluate(api, sc, places, region):
     """선택된 코스 1개를 평가 (캐시를 비운 뒤 영업 여부 재조회)"""
     from tools.hours_judge import parse_visit
-    statuses, coords, cats = [], [], []
+    statuses, coords, cats, details = [], [], [], []
     for p in places:
         when = parse_visit(sc["date"], p.get("time", ""))
-        statuses.append(api.judge(p["name"], when) if when else "unknown")
+        j = api.judge_full(p["name"], when) if when else {"status": "unknown", "place_url": ""}
+        statuses.append(j["status"])
+        details.append({"name": p["name"], "category": p.get("category", ""), "time": p.get("time", ""),
+                        "status": j["status"], "place_url": j.get("place_url", "")})
         cats.append(p.get("category", ""))
         if p.get("x") is not None:
             coords.append((p["x"], p["y"]))
@@ -195,6 +207,7 @@ def evaluate(api, sc, places, region):
         "fairness_gap": s["fairness_gap"],
         "walk_min_straight": round(dist / WALK_M_PER_MIN, 1),
         "places": json.dumps([p["name"] for p in places], ensure_ascii=False),
+        "_details": details,
     }
 
 
@@ -222,6 +235,8 @@ RUN_FIELDS = ["scenario_id", "rep", "system", "region", "pair", "pair_kind", "da
               "n_places", "violations", "unknown", "violation_rate", "avg_satisfaction", "sat_a", "sat_b",
               "fairness_gap", "walk_min_straight", "places", "error"]
 LAMBDA_FIELDS = ["scenario_id", "rep", "lambda", "chosen_index", "avg_satisfaction", "fairness_gap", "violations"]
+PLACE_FIELDS = ["scenario_id", "rep", "system", "date", "day_kind", "name", "category", "time", "status", "place_url"]
+SYSTEMS = ("R", "L", "L3", "LV", "LVF")
 
 
 def append(path, fields, row):
@@ -244,7 +259,7 @@ def done_keys(path):
         by.setdefault(key, set()).add(r["system"])
         if r["system"] == "ERROR" or r.get("error"):
             failed.add(key)                      # 오류(429 한도 초과 등)가 난 시나리오는 다시 실행
-    return {k for k, v in by.items() if {"R", "L", "LV", "LVF"} <= v and k not in failed}
+    return {k for k, v in by.items() if set(SYSTEMS) <= v and k not in failed}
 
 
 def purge(path, key):
@@ -262,19 +277,31 @@ def purge(path, key):
             w.writerows(keep)
 
 
-def run_one(api, sc, rep, runs_csv, lam_csv):
+def write_eval(runs_csv, places_csv, row):
+    """runs.csv 1행 + places.csv 장소별 행"""
+    details = row.pop("_details", [])
+    append(runs_csv, RUN_FIELDS, row)
+    for d in details:
+        append(places_csv, PLACE_FIELDS, {"scenario_id": row["scenario_id"], "rep": row["rep"], "system": row["system"],
+                                          "date": row["date"], "day_kind": row["day_kind"], **d})
+
+
+def run_one(api, sc, rep, runs_csv, lam_csv, places_csv):
     base = {k: sc[k] for k in ("scenario_id", "region", "pair", "pair_kind", "day_kind", "date")}
     base["rep"] = rep
     event = api.main_event(sc)
     if not event:
-        for system in ("R", "L", "LV", "LVF"):
+        for system in SYSTEMS:
             append(runs_csv, RUN_FIELDS, {**base, "system": system, "success": 0,
                                           "error": f"no main event: {getattr(api, 'last_error', '')}"[:300]})
         return
 
-    # 생성 단계
+    # 생성 단계 (R도 응답 시간을 잰다)
+    t0 = time.time()
     r_places = rule_based(api, sc, event)
+    r_sec = round(time.time() - t0, 1)
     gen_l = api.generate(sc, event, n=1, verify=False)
+    gen_l3 = api.generate(sc, event, n=N_CANDIDATES, verify=False)
     gen_v = api.generate(sc, event, n=N_CANDIDATES, verify=True)
 
     # 평가 단계 — 생성 때 쓴 영업시간 캐시를 비우고 다시 조회
@@ -287,14 +314,24 @@ def run_one(api, sc, rep, runs_csv, lam_csv):
                 "tool_calls": sum(tc.values()), "check_hours_calls": tc.get("check_hours", 0),
                 "cache_hits": fc.get("cache_hits", ""), "error": gen.get("error", "")}
 
-    append(runs_csv, RUN_FIELDS, {**base, "system": "R", "success": int(len(r_places) > 1),
-                                  **evaluate(api, sc, r_places, sc["region"])})
+    write_eval(runs_csv, places_csv, {**base, "system": "R", "success": int(len(r_places) > 1), "gen_sec": r_sec,
+                                      "tool_calls": 0, **evaluate(api, sc, r_places, sc["region"])})
 
     l_courses = [c for c in gen_l.get("courses", []) if c.get("places")]
     row = {**base, "system": "L", **meta(gen_l), "success": int(bool(l_courses))}
     if l_courses:
         row.update(evaluate(api, sc, l_courses[0]["places"], sc["region"]))
-    append(runs_csv, RUN_FIELDS, row)
+    write_eval(runs_csv, places_csv, row)
+
+    # L3: 검증 없이 후보 3개 중 평균 만족도(λ = 0)로 선택 — 후보 수만 LV와 같다
+    l3_courses = [c for c in gen_l3.get("courses", []) if c.get("places")]
+    row = {**base, "system": "L3", **meta(gen_l3), "success": int(bool(l3_courses))}
+    if l3_courses:
+        for c in l3_courses:
+            c["violations"] = 0                  # 검증하지 않으므로 선택 시 위반 정보를 쓰지 않는다
+        idx, _ = select(l3_courses, sc, 0.0)
+        row.update(evaluate(api, sc, l3_courses[idx]["places"], sc["region"]))
+    write_eval(runs_csv, places_csv, row)
 
     v_courses = [c for c in gen_v.get("courses", []) if c.get("places")]
     for system, lam in (("LV", 0.0), ("LVF", FAIR_LAMBDA)):
@@ -302,7 +339,7 @@ def run_one(api, sc, rep, runs_csv, lam_csv):
         if v_courses:
             idx, _ = select(v_courses, sc, lam)
             row.update(evaluate(api, sc, v_courses[idx]["places"], sc["region"]))
-        append(runs_csv, RUN_FIELDS, row)
+        write_eval(runs_csv, places_csv, row)
 
     # 표 9 — 같은 후보 집합에서 λ만 바꿔 선택 (만족도·격차는 식 (2)~(3), 위반은 check ② 기준)
     if v_courses:
@@ -328,7 +365,7 @@ def main():
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    runs_csv, lam_csv = out / "runs.csv", out / "lambda.csv"
+    runs_csv, lam_csv, places_csv = out / "runs.csv", out / "lambda.csv", out / "places.csv"
     api = Mock() if args.mock else Real()
 
     scenarios = build_scenarios(args.weekday, args.weekend, [r.strip() for r in args.regions.split(",") if r.strip()])
@@ -340,10 +377,10 @@ def main():
 
     for i, (sc, rep) in enumerate(todo, 1):
         t0 = time.time()
-        for path in (runs_csv, lam_csv):
+        for path in (runs_csv, lam_csv, places_csv):
             purge(path, (sc["scenario_id"], str(rep)))
         try:
-            run_one(api, sc, rep, runs_csv, lam_csv)
+            run_one(api, sc, rep, runs_csv, lam_csv, places_csv)
         except Exception as e:                      # 한 시나리오 실패가 전체를 멈추지 않도록
             append(runs_csv, RUN_FIELDS, {**sc, "rep": rep, "system": "ERROR", "success": 0,
                                           "error": f"{type(e).__name__}: {e}"})
