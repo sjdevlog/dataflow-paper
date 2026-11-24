@@ -42,6 +42,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+LAUNCH_DIR = Path.cwd()                      # --out 상대 경로는 실행한 위치 기준 (아래 chdir 전에 기억)
 sys.path.insert(0, str(ROOT / "ai"))
 os.chdir(ROOT / "ai")                       # ai/.env, ai/logs 기준 경로
 
@@ -364,8 +365,12 @@ def main():
     args = ap.parse_args()
 
     out = Path(args.out)
+    if not out.is_absolute():
+        out = LAUNCH_DIR / out
     out.mkdir(parents=True, exist_ok=True)
     runs_csv, lam_csv, places_csv = out / "runs.csv", out / "lambda.csv", out / "places.csv"
+    if not args.mock:
+        print(f"모델: {os.getenv('GEMINI_MODEL', '(기본값)')}  분당 호출 한도: {os.getenv('GEMINI_RPM', '4')}")
     api = Mock() if args.mock else Real()
 
     scenarios = build_scenarios(args.weekday, args.weekend, [r.strip() for r in args.regions.split(",") if r.strip()])
