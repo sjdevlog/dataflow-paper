@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 import uuid
 import functools
@@ -37,10 +38,14 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_LOG_LOCK = threading.Lock()
+
+
 def _log(record: dict) -> None:
     sid = record.get("session_id") or "no_session"
     log_file = LOG_DIR / f"{sid}.jsonl"
-    with log_file.open("a", encoding="utf-8") as f:
+    # 툴이 여러 스레드에서 동시에 호출되면 Windows에서 줄이 섞여 깨진 UTF-8이 생길 수 있어 잠근다
+    with _LOG_LOCK, log_file.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
@@ -84,7 +89,7 @@ def session_tool_counts(sid: str) -> dict:
     log_file = LOG_DIR / f"{sid}.jsonl"
     if not log_file.exists():
         return counts
-    for line in log_file.read_text(encoding="utf-8").splitlines():
+    for line in log_file.read_text(encoding="utf-8", errors="replace").splitlines():   # 깨진 줄은 건너뜀
         try:
             rec = json.loads(line)
         except json.JSONDecodeError:
