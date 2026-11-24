@@ -42,6 +42,12 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# Windows에서 출력을 파일로 돌리면 cp949로 저장돼 '—', '→' 같은 문자에서 멈춘다 → UTF-8로 고정
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
 LAUNCH_DIR = Path.cwd()                      # --out 상대 경로는 실행한 위치 기준 (아래 chdir 전에 기억)
 sys.path.insert(0, str(ROOT / "ai"))
 os.chdir(ROOT / "ai")                       # ai/.env, ai/logs 기준 경로
